@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Calendar, FileText, CreditCard } from 'lucide-react';
+import { X, Upload, Calendar, CreditCard } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
@@ -10,7 +10,6 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
     quantidade: '',
     foto: null,
     prazoEntrega: '',
-    notaFiscal: 'nao',
     metodoPagamento: '',
   });
 
@@ -26,7 +25,6 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
           quantidade: loteToEdit.quantidade || '',
           foto: loteToEdit.foto || null,
           prazoEntrega: loteToEdit.prazoEntrega || '',
-          notaFiscal: loteToEdit.notaFiscal || 'nao',
           metodoPagamento: loteToEdit.metodoPagamento || '',
         });
         setFotoPreview(loteToEdit.foto || null);
@@ -213,20 +211,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                     </div>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold mb-2 text-slate-200">
-                        <FileText className="inline w-4 h-4 mr-2" />
-                        Precisa de Nota Fiscal?
-                      </label>
-                      <div className="flex gap-2">
-                        {['sim', 'nao'].map(option => (
-                            <button type="button" key={option} onClick={() => setFormData({...formData, notaFiscal: option})} className={`flex-1 py-2 px-4 rounded-lg transition-all text-sm font-semibold ${formData.notaFiscal === option ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30' : 'glass-effect hover:bg-slate-700/60'}`}>
-                                {option.charAt(0).toUpperCase() + option.slice(1)}
-                            </button>
-                        ))}
-                      </div>
-                    </div>
+                <div className="grid grid-cols-1">
                     <div>
                       <label className="block text-sm font-semibold mb-2 text-slate-200">
                         <CreditCard className="inline w-4 h-4 mr-2" />
