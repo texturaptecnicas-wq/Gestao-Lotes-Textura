@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, Calendar, Package, Eye } from 'lucide-react';
+import { X, Search, Calendar, Package, Eye, Trash2 } from 'lucide-react';
 
-const HistoricoModal = ({ isOpen, onClose, historico }) => {
+const HistoricoModal = ({ isOpen, onClose, historico, onDelete, userRole }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLote, setSelectedLote] = useState(null);
 
@@ -35,6 +35,8 @@ const HistoricoModal = ({ isOpen, onClose, historico }) => {
       minute: '2-digit',
     });
   };
+
+  const isAdmin = userRole === 'administrador';
 
   return (
     <AnimatePresence>
@@ -120,14 +122,26 @@ const HistoricoModal = ({ isOpen, onClose, historico }) => {
                                       {lote.cor} • {lote.quantidade} peças
                                     </p>
                                   </div>
-                                  <motion.button
-                                    whileHover={{ scale: 1.1 }}
-                                    whileTap={{ scale: 0.9 }}
-                                    onClick={() => setSelectedLote(lote)}
-                                    className="p-2 glass-effect rounded-lg hover:bg-slate-700/60 transition-all"
-                                  >
-                                    <Eye className="w-5 h-5 text-sky-300" />
-                                  </motion.button>
+                                  <div className="flex items-center gap-2">
+                                    <motion.button
+                                      whileHover={{ scale: 1.1 }}
+                                      whileTap={{ scale: 0.9 }}
+                                      onClick={() => setSelectedLote(lote)}
+                                      className="p-2 glass-effect rounded-lg hover:bg-slate-700/60 transition-all"
+                                    >
+                                      <Eye className="w-5 h-5 text-sky-300" />
+                                    </motion.button>
+                                    {isAdmin && (
+                                      <motion.button
+                                        whileHover={{ scale: 1.1 }}
+                                        whileTap={{ scale: 0.9 }}
+                                        onClick={() => { if (window.confirm('Tem certeza que deseja excluir este lote do histórico?')) { onDelete(lote.id); } }}
+                                        className="p-2 glass-effect rounded-lg hover:bg-red-500/20 transition-all"
+                                      >
+                                        <Trash2 className="w-5 h-5 text-red-400" />
+                                      </motion.button>
+                                    )}
+                                  </div>
                                 </div>
                                 
                                 <div className="flex items-center gap-2 text-sm text-slate-400">

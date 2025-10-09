@@ -59,10 +59,10 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    if (!formData.cliente || !formData.cor || !formData.quantidade) {
+    if (!formData.cliente || !formData.cor) {
       toast({
         title: "⚠️ Campos obrigatórios",
-        description: "Preencha Cliente, Cor e Quantidade.",
+        description: "Preencha Cliente e Cor.",
         variant: "destructive",
       });
       return;
@@ -183,7 +183,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-semibold mb-2 text-slate-200">
-                        Quantidade de Peças *
+                        Quantidade de Peças
                       </label>
                       <input
                         type="number"

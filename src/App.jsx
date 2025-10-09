@@ -188,6 +188,20 @@ function App() {
       });
     });
   };
+
+  const handleDeleteHistoricoLote = (id) => {
+    if (userRole !== 'administrador') {
+      toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir lotes do histórico.", variant: "destructive" });
+      return;
+    }
+    const historicoRef = ref(db, `historico/${id}`);
+    remove(historicoRef).then(() => {
+      toast({
+        title: "🗑️ Lote removido do histórico",
+        description: "O lote entregue foi excluído com sucesso."
+      });
+    });
+  };
   
   const resetAllFilters = () => {
     setSearchTerm('');
@@ -377,7 +391,7 @@ function App() {
         </div>
 
         <AddLoteModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddOrUpdateLote} loteToEdit={editingLote} />
-        <HistoricoModal isOpen={isHistoricoOpen} onClose={() => setIsHistoricoOpen(false)} historico={historico} />
+        <HistoricoModal isOpen={isHistoricoOpen} onClose={() => setIsHistoricoOpen(false)} historico={historico} onDelete={handleDeleteHistoricoLote} userRole={userRole} />
         <QRScannerModal isOpen={isQRScannerOpen} onClose={() => setIsQRScannerOpen(false)} onScan={handleMarcarPintadoPorQR} lotes={lotes} />
         <Toaster />
       </div>
