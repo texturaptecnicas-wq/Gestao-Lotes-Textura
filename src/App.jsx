@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, Info, LogOut, DollarSign, Ruler, FileText, FilterX } from 'lucide-react';
+import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, Info, LogOut, DollarSign, Ruler, FileText, FilterX, Star } from 'lucide-react';
 import { db } from '@/firebase';
 import { ref, onValue, set, remove, update } from 'firebase/database';
 import { Toaster } from '@/components/ui/toaster';
@@ -42,7 +42,11 @@ function App() {
       const lotesArray = data ? Object.keys(data).map(key => ({
         id: key,
         ...data[key]
-      })).sort((a, b) => new Date(b.dataCriacao) - new Date(a.dataCriacao)) : [];
+      })).sort((a, b) => {
+        if (a.promessa && !b.promessa) return -1;
+        if (!a.promessa && b.promessa) return 1;
+        return new Date(b.dataCriacao) - new Date(a.dataCriacao);
+      }) : [];
       setLotes(lotesArray);
     });
 
@@ -100,11 +104,12 @@ function App() {
       const loteComId = {
         ...loteData,
         dataCriacao: new Date().toISOString(),
-        pago: false,
-        medida: false,
+        pago: 'unanalysed',
+        medida: 'unanalysed',
+        notaFiscal: 'unanalysed',
         programado: false,
         pintado: false,
-        notaFiscal: false,
+        promessa: false,
       };
       set(loteRef, loteComId).then(() => {
         toast({
@@ -118,9 +123,29 @@ function App() {
 
   const handleUpdateLoteStatus = (id, updates) => {
     const loteRef = ref(db, `lotes/${id}`);
+    const loteOriginal = lotes.find(l => l.id === id);
+
+    if (updates.programado === true) {
+      updates.pintado = false;
+    }
+    
+    if (updates.programado === false && loteOriginal.programado) {
+       updates.promessa = false;
+    }
+
     if (updates.pintado === true) {
       updates.programado = false;
     }
+
+    if(updates.promessa === true && !loteOriginal.programado) {
+      toast({
+        title: "⚠️ Ação inválida",
+        description: "Marque o lote como 'Programado p/ Hoje' antes de definir como promessa.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     update(loteRef, updates).then(() => {
       toast({
         title: "✅ Status atualizado!",
@@ -128,6 +153,7 @@ function App() {
       });
     });
   };
+
 
   const handleMarcarPintadoPorQR = (id) => {
     const loteOriginal = lotes.find(l => l.id === id);
@@ -152,10 +178,12 @@ function App() {
   const handleMarcarEntregue = (id) => {
     const loteToMove = lotes.find(l => l.id === id);
     if (loteToMove) {
-      if (!loteToMove.pago || !loteToMove.medida || !loteToMove.pintado) {
+      const isReady = loteToMove.pago === 'ok' && loteToMove.medida === 'ok' && loteToMove.pintado;
+
+      if (!isReady) {
         toast({
           title: "⚠️ Ação bloqueada",
-          description: "Marque todos os status (Pago, Medida, Pintado) antes de entregar.",
+          description: "Status 'Pago', 'Medida' devem estar verdes e o lote 'Pintado' para entregar.",
           variant: "destructive"
         });
         return;
@@ -219,13 +247,19 @@ function App() {
     if (!matchesSearch) return false;
 
     if (statusFilters.pago !== 'any') {
-      if ((statusFilters.pago === 'sim' && !currentLote.pago) || (statusFilters.pago === 'nao' && currentLote.pago)) return false;
+      if ((statusFilters.pago === 'ok' && currentLote.pago !== 'ok') ||
+          (statusFilters.pago === 'pending' && currentLote.pago !== 'pending') ||
+          (statusFilters.pago === 'unanalysed' && currentLote.pago !== 'unanalysed')) return false;
     }
     if (statusFilters.medida !== 'any') {
-      if ((statusFilters.medida === 'sim' && !currentLote.medida) || (statusFilters.medida === 'nao' && currentLote.medida)) return false;
+      if ((statusFilters.medida === 'ok' && currentLote.medida !== 'ok') ||
+          (statusFilters.medida === 'pending' && currentLote.medida !== 'pending') ||
+          (statusFilters.medida === 'unanalysed' && currentLote.medida !== 'unanalysed')) return false;
     }
     if (statusFilters.notaFiscal !== 'any') {
-        if ((statusFilters.notaFiscal === 'sim' && !currentLote.notaFiscal) || (statusFilters.notaFiscal === 'nao' && currentLote.notaFiscal)) return false;
+        if ((statusFilters.notaFiscal === 'ok' && currentLote.notaFiscal !== 'ok') ||
+            (statusFilters.notaFiscal === 'pending' && currentLote.notaFiscal !== 'pending') ||
+            (statusFilters.notaFiscal === 'unanalysed' && currentLote.notaFiscal !== 'unanalysed')) return false;
     }
 
     switch (filterStatus) {
@@ -328,22 +362,28 @@ function App() {
               <div className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-emerald-300 flex-shrink-0" />
                 <select value={statusFilters.pago} onChange={e => setStatusFilters({...statusFilters, pago: e.target.value})} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
-                  <option value="sim">Pago</option>
-                  <option value="nao">Não Pago</option>
+                  <option value="any">Pago (Todos)</option>
+                  <option value="ok">Pago (OK)</option>
+                  <option value="pending">Pago (Pendente)</option>
+                  <option value="unanalysed">Pago (Não Analisado)</option>
                 </select>
               </div>
               <div className="flex items-center gap-2">
                 <Ruler className="w-5 h-5 text-cyan-300 flex-shrink-0" />
                 <select value={statusFilters.medida} onChange={e => setStatusFilters({...statusFilters, medida: e.target.value})} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
-                  <option value="sim">Medido</option>
-                  <option value="nao">Não Medido</option>
+                  <option value="any">Medida (Todos)</option>
+                  <option value="ok">Medida (OK)</option>
+                  <option value="pending">Medida (Pendente)</option>
+                  <option value="unanalysed">Medida (Não Analisado)</option>
                 </select>
               </div>
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-indigo-300 flex-shrink-0" />
                 <select value={statusFilters.notaFiscal} onChange={e => setStatusFilters({...statusFilters, notaFiscal: e.target.value})} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
-                  <option value="sim">Com NF</option>
-                  <option value="nao">Sem NF</option>
+                  <option value="any">NF (Todos)</option>
+                  <option value="ok">NF (OK)</option>
+                  <option value="pending">NF (Pendente)</option>
+                  <option value="unanalysed">NF (Não Analisado)</option>
                 </select>
               </div>
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={resetAllFilters} className="glass-effect px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-slate-700/60 transition-all text-sm">
@@ -355,7 +395,7 @@ function App() {
 
           <div className="glass-effect rounded-xl p-3 mb-6 flex items-center gap-3 text-sm text-slate-300">
             <Info className="w-5 h-5 text-sky-300 flex-shrink-0" />
-            <p><span className="font-bold text-white">Legenda:</span> Botões coloridos indicam status concluídos. Botões cinza indicam pendências.</p>
+            <p><span className="font-bold text-white">Legenda:</span> Cinza: não analisado. Vermelho: pendente. Verde: OK.</p>
           </div>
 
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>

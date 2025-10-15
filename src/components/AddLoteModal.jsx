@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Calendar, CreditCard } from 'lucide-react';
+import { X, Upload, Calendar, CreditCard, MessageSquare } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
@@ -11,6 +11,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
     foto: null,
     prazoEntrega: '',
     metodoPagamento: '',
+    observacao: '',
   });
 
   const [formData, setFormData] = useState(getInitialState());
@@ -26,6 +27,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
           foto: loteToEdit.foto || null,
           prazoEntrega: loteToEdit.prazoEntrega || '',
           metodoPagamento: loteToEdit.metodoPagamento || '',
+          observacao: loteToEdit.observacao || '',
         });
         setFotoPreview(loteToEdit.foto || null);
       } else {
@@ -187,7 +189,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                       </label>
                       <input
                         type="number"
-                        min="1"
+                        min="0"
                         value={formData.quantidade}
                         onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
                         placeholder="Ex: 50"
@@ -225,6 +227,20 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                         className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
                       />
                     </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-slate-200">
+                    <MessageSquare className="inline w-4 h-4 mr-2" />
+                    Observação
+                  </label>
+                  <textarea
+                    value={formData.observacao}
+                    onChange={(e) => setFormData({ ...formData, observacao: e.target.value })}
+                    placeholder="Adicione uma observação sobre o lote..."
+                    rows="3"
+                    className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                  />
                 </div>
 
                 <div className="flex gap-4 pt-4">

@@ -1,26 +1,27 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, CreditCard, FileImage as ImageIcon, Lock } from 'lucide-react';
+import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, CreditCard, FileImage as ImageIcon, Lock, Star, MessageSquare } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
 
-const StatusButton = ({ Icon, label, isActive, onClick, colorClass, isDisabled = false }) => {
+const StatusButton = ({ Icon, label, status, onClick, isDisabled = false }) => {
   const colorMap = {
-    pago: { bg: 'bg-emerald-500', text: 'text-emerald-50', ring: 'ring-emerald-500' },
-    medida: { bg: 'bg-cyan-500', text: 'text-cyan-50', ring: 'ring-cyan-500' },
-    notaFiscal: { bg: 'bg-indigo-500', text: 'text-indigo-50', ring: 'ring-indigo-500' },
-    programado: { bg: 'bg-orange-500', text: 'text-orange-50', ring: 'ring-orange-500' },
-    pintado: { bg: 'bg-green-600', text: 'text-green-50', ring: 'ring-green-600' },
+    ok: { bg: 'bg-green-500', text: 'text-green-50', ring: 'ring-green-500' },
+    pending: { bg: 'bg-red-500', text: 'text-red-50', ring: 'ring-red-500' },
+    unanalysed: { bg: 'bg-slate-700/50', text: 'text-slate-400', ring: 'ring-transparent' },
   };
 
-  const activeClasses = colorMap[colorClass];
+  const getValidStatus = (s) => {
+    if (s === 'ok' || s === 'pending' || s === 'unanalysed') return s;
+    if (s === true) return 'ok';
+    return 'unanalysed';
+  };
   
-  const inactiveBg = 'bg-slate-700/50';
-  const inactiveText = 'text-slate-400';
-  const inactiveRing = 'ring-transparent';
+  const validStatus = getValidStatus(status);
+  const activeClasses = colorMap[validStatus];
   
   const baseClasses = `p-2 rounded-lg flex flex-col items-center justify-center gap-1.5 transition-all w-full text-center relative overflow-hidden ring-2`;
-  const stateClasses = isActive ? `${activeClasses.bg} ${activeClasses.ring}` : `${inactiveBg} ${inactiveRing}`;
+  const stateClasses = `${activeClasses.bg} ${activeClasses.ring}`;
   const disabledClasses = isDisabled ? 'cursor-not-allowed opacity-70' : 'hover:scale-105 hover:-translate-y-0.5';
 
   return (
@@ -31,10 +32,10 @@ const StatusButton = ({ Icon, label, isActive, onClick, colorClass, isDisabled =
       className={`${baseClasses} ${stateClasses} ${disabledClasses}`}
     >
       {isDisabled && <Lock className="absolute top-1 right-1 w-2.5 h-2.5 text-slate-400" />}
-      <Icon className={`w-4 h-4 transition-colors ${isActive ? activeClasses.text : inactiveText}`} />
-      <span className={`text-[10px] font-bold transition-colors ${isActive ? activeClasses.text : inactiveText}`}>{label}</span>
+      <Icon className={`w-4 h-4 transition-colors ${activeClasses.text}`} />
+      <span className={`text-[10px] font-bold transition-colors ${activeClasses.text}`}>{label}</span>
       <AnimatePresence>
-      {isActive &&
+      {validStatus !== 'unanalysed' &&
         <motion.div
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -49,32 +50,70 @@ const StatusButton = ({ Icon, label, isActive, onClick, colorClass, isDisabled =
   );
 };
 
+const SimpleStatusButton = ({ Icon, label, isActive, onClick, colorClass }) => {
+    const colorMap = {
+        programado: { bg: 'bg-orange-500', text: 'text-orange-50', ring: 'ring-orange-500' },
+        pintado: { bg: 'bg-green-600', text: 'text-green-50', ring: 'ring-green-600' },
+    };
+    const activeClasses = colorMap[colorClass];
+    const inactiveBg = 'bg-slate-700/50';
+    const inactiveText = 'text-slate-400';
+    const inactiveRing = 'ring-transparent';
+
+    const baseClasses = `p-2 rounded-lg flex flex-col items-center justify-center gap-1.5 transition-all w-full text-center relative overflow-hidden ring-2`;
+    const stateClasses = isActive ? `${activeClasses.bg} ${activeClasses.ring}` : `${inactiveBg} ${inactiveRing}`;
+
+    return (
+        <motion.button whileHover={{scale: 1.05, y: -2}} whileTap={{scale: 0.95}} onClick={onClick} className={`${baseClasses} ${stateClasses} hover:scale-105 hover:-translate-y-0.5`}>
+            <Icon className={`w-4 h-4 transition-colors ${isActive ? activeClasses.text : inactiveText}`}/>
+            <span className={`text-[10px] font-bold transition-colors ${isActive ? activeClasses.text : inactiveText}`}>{label}</span>
+             <AnimatePresence>
+                {isActive &&
+                <motion.div initial={{scale: 0, opacity: 0}} animate={{scale: 1, opacity: 1}} exit={{scale: 0, opacity: 0}} className="absolute inset-0 bg-white/20" style={{clipPath: 'circle(100% at 50% 50%)'}} transition={{duration: 0.4}}/>
+                }
+            </AnimatePresence>
+        </motion.button>
+    );
+};
+
+
 const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit }) => {
   const [showQR, setShowQR] = useState(false);
   const [showImage, setShowImage] = useState(false);
 
-  const handleToggleStatus = (field) => {
+  const handleToggleStatus = (field, currentStatus) => {
     const isProtectedField = ['pago', 'medida', 'notaFiscal'].includes(field);
     if (isProtectedField && userRole !== 'administrador') {
       toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para alterar este status.", variant: "destructive" });
       return;
     }
-    onUpdateStatus(lote.id, { [field]: !lote[field] });
+
+    const nextStatus = {
+        'unanalysed': 'pending',
+        'pending': 'ok',
+        'ok': 'unanalysed',
+    };
+    
+    const validCurrentStatus = ['ok', 'pending', 'unanalysed'].includes(currentStatus) ? currentStatus : 'unanalysed';
+    
+    onUpdateStatus(lote.id, { [field]: nextStatus[validCurrentStatus] });
   };
 
   const getStatusText = () => {
     if (lote.pintado) return 'Pintado';
+    if (lote.promessa) return 'Promessa p/ Hoje';
     if (lote.programado) return 'Programado p/ Hoje';
     return 'Recebido';
   };
 
   const getStatusColor = () => {
     if (lote.pintado) return 'bg-green-600/80';
+    if (lote.promessa) return 'bg-yellow-500/80 text-yellow-900';
     if (lote.programado) return 'bg-orange-500/80';
     return 'bg-slate-500/80';
   };
   
-  const isReadyForDelivery = lote.pago && lote.medida && lote.pintado;
+  const isReadyForDelivery = lote.pago === 'ok' && lote.medida === 'ok' && lote.pintado;
 
   const formatDate = (dateString) => {
     if (!dateString) return null;
@@ -94,14 +133,19 @@ const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onD
         exit={{ opacity: 0, scale: 0.9 }}
         transition={{ delay: index * 0.05 }}
         whileHover={{ y: -5, boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.3)' }}
-        className="glass-effect rounded-2xl overflow-hidden group flex flex-col"
+        className={`glass-effect rounded-2xl overflow-hidden group flex flex-col relative ${lote.promessa ? 'ring-2 ring-yellow-400 shadow-yellow-400/30 shadow-lg' : ''}`}
       >
+        {lote.promessa && (
+            <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 rounded-full p-1.5 z-10 shadow-lg">
+                <Star className="w-4 h-4" fill="currentColor" />
+            </div>
+        )}
         <div className="p-4 flex flex-col flex-grow gap-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
-                <StatusButton Icon={DollarSign} label="Pago" isActive={lote.pago} onClick={() => handleToggleStatus('pago')} colorClass="pago" isDisabled={!isAdmin} />
-                <StatusButton Icon={Ruler} label="Medida" isActive={lote.medida} onClick={() => handleToggleStatus('medida')} colorClass="medida" isDisabled={!isAdmin} />
-                <StatusButton Icon={FileText} label="NF" isActive={lote.notaFiscal} onClick={() => handleToggleStatus('notaFiscal')} colorClass="notaFiscal" isDisabled={!isAdmin} />
+                <StatusButton Icon={DollarSign} label="Pago" status={lote.pago} onClick={() => handleToggleStatus('pago', lote.pago)} isDisabled={!isAdmin} />
+                <StatusButton Icon={Ruler} label="Medida" status={lote.medida} onClick={() => handleToggleStatus('medida', lote.medida)} isDisabled={!isAdmin} />
+                <StatusButton Icon={FileText} label="NF" status={lote.notaFiscal} onClick={() => handleToggleStatus('notaFiscal', lote.notaFiscal)} isDisabled={!isAdmin} />
               </div>
               
               <div className="flex-grow min-w-0 text-center flex flex-col items-center">
@@ -120,7 +164,7 @@ const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onD
                   </div>
                   <h3 className="text-base font-bold text-shadow-lg text-slate-100 truncate w-full">{lote.cliente}</h3>
                   <p className="text-xs text-slate-300 text-shadow truncate w-full">
-                      {lote.cor} • {lote.quantidade} peças
+                      {lote.cor} • {lote.quantidade ? `${lote.quantidade} peças` : 'N/A'}
                   </p>
                   {lote.prazoEntrega && (
                   <div className="mt-1 glass-effect px-2 py-0.5 rounded-md inline-flex items-center gap-1.5 text-xs font-semibold text-slate-200">
@@ -131,17 +175,29 @@ const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onD
               </div>
               
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
-                <StatusButton Icon={CalendarCheck} label="Progr." isActive={lote.programado} onClick={() => handleToggleStatus('programado')} colorClass="programado" />
-                <StatusButton Icon={CheckCircle} label="Pintado" isActive={lote.pintado} onClick={() => handleToggleStatus('pintado')} colorClass="pintado" />
+                <SimpleStatusButton Icon={CalendarCheck} label="Progr." isActive={lote.programado} onClick={() => onUpdateStatus(lote.id, { programado: !lote.programado })} colorClass="programado" />
+                <SimpleStatusButton Icon={CheckCircle} label="Pintado" isActive={lote.pintado} onClick={() => onUpdateStatus(lote.id, { pintado: !lote.pintado })} colorClass="pintado" />
+                <motion.button whileHover={{scale: 1.05, y: -2}} whileTap={{scale: 0.95}} onClick={() => onUpdateStatus(lote.id, { promessa: !lote.promessa })} className={`p-2 rounded-lg flex flex-col items-center justify-center gap-1.5 transition-all w-full text-center relative overflow-hidden ring-2 ${lote.promessa ? 'bg-yellow-400 ring-yellow-400' : 'bg-slate-700/50 ring-transparent'}`}>
+                    <Star className={`w-4 h-4 transition-colors ${lote.promessa ? 'text-yellow-900' : 'text-slate-400'}`}/>
+                    <span className={`text-[10px] font-bold transition-colors ${lote.promessa ? 'text-yellow-900' : 'text-slate-400'}`}>Promessa p/ Hoje</span>
+                </motion.button>
               </div>
           </div>
           
-          {lote.metodoPagamento && (
-            <div className="glass-effect rounded-lg p-2 text-[11px] mt-auto">
-                <div className="flex items-center gap-2 text-slate-300">
-                    <CreditCard className="w-3 h-3 flex-shrink-0 text-sky-300" />
-                    <span>Pgto: <strong>{lote.metodoPagamento}</strong></span>
-                </div>
+          {(lote.metodoPagamento || lote.observacao) && (
+            <div className="glass-effect rounded-lg p-2 text-[11px] mt-auto space-y-1">
+                {lote.metodoPagamento && (
+                    <div className="flex items-center gap-2 text-slate-300">
+                        <CreditCard className="w-3 h-3 flex-shrink-0 text-sky-300" />
+                        <span>Pgto: <strong>{lote.metodoPagamento}</strong></span>
+                    </div>
+                )}
+                 {lote.observacao && (
+                    <div className="flex items-start gap-2 text-slate-300">
+                        <MessageSquare className="w-3 h-3 flex-shrink-0 text-amber-300 mt-0.5" />
+                        <span className="truncate-3-lines">{lote.observacao}</span>
+                    </div>
+                )}
             </div>
           )}
         </div>
