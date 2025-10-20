@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, Info, LogOut, DollarSign, Ruler, FileText, FilterX, Star } from 'lucide-react';
@@ -12,6 +13,9 @@ import HistoricoModal from '@/components/HistoricoModal';
 import QRScannerModal from '@/components/QRScannerModal';
 import LoginScreen from '@/components/LoginScreen';
 
+const INITIAL_LOAD_COUNT = 20;
+const LOAD_MORE_COUNT = 20;
+
 function App() {
   const [lotes, setLotes] = useState([]);
   const [historico, setHistorico] = useState([]);
@@ -23,6 +27,8 @@ function App() {
   const [filterStatus, setFilterStatus] = useState('todos');
   const [statusFilters, setStatusFilters] = useState({ pago: 'any', medida: 'any', notaFiscal: 'any' });
   const [userRole, setUserRole] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_LOAD_COUNT);
+  const observer = useRef(null);
 
   useEffect(() => {
     const storedRole = localStorage.getItem('userRole');
@@ -42,12 +48,9 @@ function App() {
       const lotesArray = data ? Object.keys(data).map(key => ({
         id: key,
         ...data[key]
-      })).sort((a, b) => {
-        if (a.promessa && !b.promessa) return -1;
-        if (!a.promessa && b.promessa) return 1;
-        return new Date(b.dataCriacao) - new Date(a.dataCriacao);
-      }) : [];
+      })) : [];
       setLotes(lotesArray);
+      setVisibleCount(INITIAL_LOAD_COUNT);
     });
 
     const unsubscribeHistorico = onValue(historicoRef, snapshot => {
@@ -65,31 +68,31 @@ function App() {
     };
   }, [userRole]);
   
-  const handleLogin = (role) => {
+  const handleLogin = useCallback((role) => {
     localStorage.setItem('userRole', role);
     setUserRole(role);
-  };
+  }, []);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('userRole');
     setUserRole(null);
-  };
+  }, []);
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = useCallback(() => {
     setEditingLote(null);
     setIsAddModalOpen(true);
-  };
+  }, []);
 
-  const handleOpenEditModal = (loteToEdit) => {
+  const handleOpenEditModal = useCallback((loteToEdit) => {
     if (userRole !== 'administrador') {
       toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para editar lotes.", variant: "destructive" });
       return;
     }
     setEditingLote(loteToEdit);
     setIsAddModalOpen(true);
-  };
+  }, [userRole]);
 
-  const handleAddOrUpdateLote = (loteData, id) => {
+  const handleAddOrUpdateLote = useCallback((loteData, id) => {
     const loteId = id || Date.now().toString();
     const loteRef = ref(db, `lotes/${loteId}`);
 
@@ -119,11 +122,13 @@ function App() {
       });
     }
     setEditingLote(null);
-  };
+  }, []);
 
-  const handleUpdateLoteStatus = (id, updates) => {
+  const handleUpdateLoteStatus = useCallback((id, updates) => {
     const loteRef = ref(db, `lotes/${id}`);
     const loteOriginal = lotes.find(l => l.id === id);
+
+    if (!loteOriginal) return;
 
     if (updates.programado === true) {
       updates.pintado = false;
@@ -152,10 +157,10 @@ function App() {
         description: "As informações foram atualizadas com sucesso."
       });
     });
-  };
+  }, [lotes]);
 
 
-  const handleMarcarPintadoPorQR = (id) => {
+  const handleMarcarPintadoPorQR = useCallback((id) => {
     const loteOriginal = lotes.find(l => l.id === id);
     if (loteOriginal && loteOriginal.pintado) {
       toast({
@@ -173,9 +178,9 @@ function App() {
         });
       }
     });
-  };
+  }, [lotes]);
 
-  const handleMarcarEntregue = (id) => {
+  const handleMarcarEntregue = useCallback((id) => {
     const loteToMove = lotes.find(l => l.id === id);
     if (loteToMove) {
       const isReady = loteToMove.pago === 'ok' && loteToMove.medida === 'ok' && loteToMove.pintado;
@@ -201,9 +206,9 @@ function App() {
         });
       });
     }
-  };
+  }, [lotes]);
 
-  const handleDeleteLote = (id) => {
+  const handleDeleteLote = useCallback((id) => {
     if (userRole !== 'administrador') {
       toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir lotes.", variant: "destructive" });
       return;
@@ -215,9 +220,9 @@ function App() {
         description: "O lote foi excluído com sucesso."
       });
     });
-  };
+  }, [userRole]);
 
-  const handleDeleteHistoricoLote = (id) => {
+  const handleDeleteHistoricoLote = useCallback((id) => {
     if (userRole !== 'administrador') {
       toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir lotes do histórico.", variant: "destructive" });
       return;
@@ -229,59 +234,92 @@ function App() {
         description: "O lote entregue foi excluído com sucesso."
       });
     });
-  };
+  }, [userRole]);
   
-  const resetAllFilters = () => {
+  const resetAllFilters = useCallback(() => {
     setSearchTerm('');
     setFilterStatus('todos');
     setStatusFilters({ pago: 'any', medida: 'any', notaFiscal: 'any' });
-  };
+    setVisibleCount(INITIAL_LOAD_COUNT);
+  }, []);
+  
+  const handleFilterChange = useCallback((newFilter) => {
+    setFilterStatus(newFilter);
+    setVisibleCount(INITIAL_LOAD_COUNT);
+    window.scrollTo(0, 0);
+  }, []);
 
-  const filteredLotes = lotes.filter(currentLote => {
-    const lowerSearchTerm = searchTerm.toLowerCase();
+  const handleStatusFilterChange = useCallback((filterName, value) => {
+      setStatusFilters(prev => ({...prev, [filterName]: value}));
+      setVisibleCount(INITIAL_LOAD_COUNT);
+      window.scrollTo(0, 0);
+  }, []);
 
-    const matchesSearch = lowerSearchTerm === '' ||
-                         (currentLote.cliente?.toLowerCase() || '').includes(lowerSearchTerm) ||
-                         (currentLote.cor?.toLowerCase() || '').includes(lowerSearchTerm);
+  const filteredLotes = useMemo(() => {
+    return lotes
+      .filter(currentLote => {
+        const lowerSearchTerm = searchTerm.toLowerCase();
 
-    if (!matchesSearch) return false;
+        const matchesSearch = lowerSearchTerm === '' ||
+                             (currentLote.cliente?.toLowerCase() || '').includes(lowerSearchTerm) ||
+                             (currentLote.cor?.toLowerCase() || '').includes(lowerSearchTerm);
 
-    if (statusFilters.pago !== 'any') {
-      if ((statusFilters.pago === 'ok' && currentLote.pago !== 'ok') ||
-          (statusFilters.pago === 'pending' && currentLote.pago !== 'pending') ||
-          (statusFilters.pago === 'unanalysed' && currentLote.pago !== 'unanalysed')) return false;
-    }
-    if (statusFilters.medida !== 'any') {
-      if ((statusFilters.medida === 'ok' && currentLote.medida !== 'ok') ||
-          (statusFilters.medida === 'pending' && currentLote.medida !== 'pending') ||
-          (statusFilters.medida === 'unanalysed' && currentLote.medida !== 'unanalysed')) return false;
-    }
-    if (statusFilters.notaFiscal !== 'any') {
-        if ((statusFilters.notaFiscal === 'ok' && currentLote.notaFiscal !== 'ok') ||
-            (statusFilters.notaFiscal === 'pending' && currentLote.notaFiscal !== 'pending') ||
-            (statusFilters.notaFiscal === 'unanalysed' && currentLote.notaFiscal !== 'unanalysed')) return false;
-    }
+        if (!matchesSearch) return false;
 
-    switch (filterStatus) {
-      case 'todos':
-        return true;
-      case 'recebido':
-        return !currentLote.programado && !currentLote.pintado;
-      case 'programado':
-        return currentLote.programado && !currentLote.pintado;
-      case 'pintado':
-        return currentLote.pintado;
-      default:
-        return true;
-    }
-  });
+        if (statusFilters.pago !== 'any') {
+          if ((statusFilters.pago === 'ok' && currentLote.pago !== 'ok') ||
+              (statusFilters.pago === 'pending' && currentLote.pago !== 'pending') ||
+              (statusFilters.pago === 'unanalysed' && currentLote.pago !== 'unanalysed')) return false;
+        }
+        if (statusFilters.medida !== 'any') {
+          if ((statusFilters.medida === 'ok' && currentLote.medida !== 'ok') ||
+              (statusFilters.medida === 'pending' && currentLote.medida !== 'pending') ||
+              (statusFilters.medida === 'unanalysed' && currentLote.medida !== 'unanalysed')) return false;
+        }
+        if (statusFilters.notaFiscal !== 'any') {
+            if ((statusFilters.notaFiscal === 'ok' && currentLote.notaFiscal !== 'ok') ||
+                (statusFilters.notaFiscal === 'pending' && currentLote.notaFiscal !== 'pending') ||
+                (statusFilters.notaFiscal === 'unanalysed' && currentLote.notaFiscal !== 'unanalysed')) return false;
+        }
 
-  const stats = {
+        switch (filterStatus) {
+          case 'todos':
+            return true;
+          case 'recebido':
+            return !currentLote.programado && !currentLote.pintado;
+          case 'programado':
+            return currentLote.programado && !currentLote.pintado;
+          case 'pintado':
+            return currentLote.pintado;
+          default:
+            return true;
+        }
+      })
+      .sort((a, b) => {
+        if (a.promessa && !b.promessa) return -1;
+        if (!a.promessa && b.promessa) return 1;
+        return new Date(b.dataCriacao) - new Date(a.dataCriacao);
+      });
+  }, [lotes, searchTerm, filterStatus, statusFilters]);
+  
+  const visibleLotes = useMemo(() => filteredLotes.slice(0, visibleCount), [filteredLotes, visibleCount]);
+  
+  const lastElementRef = useCallback(node => {
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver(entries => {
+          if (entries[0].isIntersecting && visibleCount < filteredLotes.length) {
+              setVisibleCount(prev => prev + LOAD_MORE_COUNT);
+          }
+      });
+      if (node) observer.current.observe(node);
+  }, [visibleCount, filteredLotes.length]);
+
+  const stats = useMemo(() => ({
     total: lotes.length,
     recebido: lotes.filter(l => !l.programado && !l.pintado).length,
     programado: lotes.filter(l => l.programado && !l.pintado).length,
     pintado: lotes.filter(l => l.pintado).length,
-  };
+  }), [lotes]);
 
   const filterOptions = [
     { id: 'todos', label: 'Todos', icon: Package },
@@ -350,7 +388,7 @@ function App() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 md:flex gap-2">
                 {filterOptions.map((status) => (
-                  <motion.button key={status.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setFilterStatus(status.id)} className={`w-full md:w-auto px-3 py-3 md:px-4 rounded-xl font-semibold whitespace-nowrap transition-all flex items-center justify-center gap-2 text-sm ${filterStatus === status.id ? 'bg-gradient-to-r from-sky-500 to-indigo-500 shadow-lg shadow-sky-500/30' : 'glass-effect hover:bg-slate-700/60'}`}>
+                  <motion.button key={status.id} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => handleFilterChange(status.id)} className={`w-full md:w-auto px-3 py-3 md:px-4 rounded-xl font-semibold whitespace-nowrap transition-all flex items-center justify-center gap-2 text-sm ${filterStatus === status.id ? 'bg-gradient-to-r from-sky-500 to-indigo-500 shadow-lg shadow-sky-500/30' : 'glass-effect hover:bg-slate-700/60'}`}>
                     <status.icon className="w-5 h-5" />
                     <span>{status.label}</span>
                   </motion.button>
@@ -361,7 +399,7 @@ function App() {
             <div className="flex flex-wrap items-center gap-4 mt-4">
               <div className="flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-emerald-300 flex-shrink-0" />
-                <select value={statusFilters.pago} onChange={e => setStatusFilters({...statusFilters, pago: e.target.value})} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                <select value={statusFilters.pago} onChange={e => handleStatusFilterChange('pago', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
                   <option value="any">Pago (Todos)</option>
                   <option value="ok">Pago (OK)</option>
                   <option value="pending">Pago (Pendente)</option>
@@ -370,7 +408,7 @@ function App() {
               </div>
               <div className="flex items-center gap-2">
                 <Ruler className="w-5 h-5 text-cyan-300 flex-shrink-0" />
-                <select value={statusFilters.medida} onChange={e => setStatusFilters({...statusFilters, medida: e.target.value})} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                <select value={statusFilters.medida} onChange={e => handleStatusFilterChange('medida', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
                   <option value="any">Medida (Todos)</option>
                   <option value="ok">Medida (OK)</option>
                   <option value="pending">Medida (Pendente)</option>
@@ -379,7 +417,7 @@ function App() {
               </div>
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-indigo-300 flex-shrink-0" />
-                <select value={statusFilters.notaFiscal} onChange={e => setStatusFilters({...statusFilters, notaFiscal: e.target.value})} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
+                <select value={statusFilters.notaFiscal} onChange={e => handleStatusFilterChange('notaFiscal', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500">
                   <option value="any">NF (Todos)</option>
                   <option value="ok">NF (OK)</option>
                   <option value="pending">NF (Pendente)</option>
@@ -399,7 +437,7 @@ function App() {
           </div>
 
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            {filteredLotes.length === 0 ? (
+            {visibleLotes.length === 0 ? (
               <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-effect p-12 rounded-2xl text-center">
                 <Package className="w-16 h-16 mx-auto mb-4 text-slate-500" />
                 <h3 className="text-2xl font-bold mb-2">Nenhum lote encontrado</h3>
@@ -412,20 +450,26 @@ function App() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 <AnimatePresence>
-                  {filteredLotes.map((currentLote, index) => (
-                    <LoteCard
-                      key={currentLote.id}
-                      lote={currentLote}
-                      index={index}
-                      userRole={userRole}
-                      onUpdateStatus={handleUpdateLoteStatus}
-                      onMarcarEntregue={handleMarcarEntregue}
-                      onDelete={handleDeleteLote}
-                      onEdit={handleOpenEditModal}
-                    />
+                  {visibleLotes.map((currentLote, index) => (
+                    <div key={currentLote.id} ref={index === visibleLotes.length - 1 ? lastElementRef : null}>
+                        <LoteCard
+                          lote={currentLote}
+                          index={index}
+                          userRole={userRole}
+                          onUpdateStatus={handleUpdateLoteStatus}
+                          onMarcarEntregue={handleMarcarEntregue}
+                          onDelete={handleDeleteLote}
+                          onEdit={handleOpenEditModal}
+                        />
+                    </div>
                   ))}
                 </AnimatePresence>
               </div>
+            )}
+            {visibleCount < filteredLotes.length && (
+                <div className="text-center p-8 text-slate-400">
+                    Carregando mais lotes...
+                </div>
             )}
           </motion.div>
         </div>

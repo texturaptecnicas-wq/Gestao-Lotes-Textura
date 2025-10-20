@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+
+import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, CreditCard, FileImage as ImageIcon, Lock, Star, MessageSquare } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
 
-const StatusButton = ({ Icon, label, status, onClick, isDisabled = false }) => {
+const StatusButton = memo(({ Icon, label, status, onClick, isDisabled = false }) => {
   const colorMap = {
     ok: { bg: 'bg-green-500', text: 'text-green-50', ring: 'ring-green-500' },
     pending: { bg: 'bg-red-500', text: 'text-red-50', ring: 'ring-red-500' },
@@ -48,9 +49,9 @@ const StatusButton = ({ Icon, label, status, onClick, isDisabled = false }) => {
       </AnimatePresence>
     </motion.button>
   );
-};
+});
 
-const SimpleStatusButton = ({ Icon, label, isActive, onClick, colorClass }) => {
+const SimpleStatusButton = memo(({ Icon, label, isActive, onClick, colorClass }) => {
     const colorMap = {
         programado: { bg: 'bg-orange-500', text: 'text-orange-50', ring: 'ring-orange-500' },
         pintado: { bg: 'bg-green-600', text: 'text-green-50', ring: 'ring-green-600' },
@@ -74,7 +75,7 @@ const SimpleStatusButton = ({ Icon, label, isActive, onClick, colorClass }) => {
             </AnimatePresence>
         </motion.button>
     );
-};
+});
 
 
 const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit }) => {
@@ -245,4 +246,5 @@ const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onD
   );
 };
 
-export default LoteCard;
+export default memo(LoteCard);
+  
