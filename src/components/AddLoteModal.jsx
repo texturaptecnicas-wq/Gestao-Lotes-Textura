@@ -1,5 +1,4 @@
-
-    import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
     import { motion, AnimatePresence } from 'framer-motion';
     import { X, Plus, Trash2, Camera, UploadCloud } from 'lucide-react';
     import { toast } from '@/components/ui/use-toast';
@@ -240,4 +239,3 @@
     };
 
     export default AddLoteModal;
-  
