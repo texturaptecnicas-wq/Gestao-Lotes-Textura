@@ -47,24 +47,62 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit, userRole }) => {
     }
   }, [loteToEdit, isOpen]);
 
-  const handleImageUpload = (e) => {
+  const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                reject(new Error('Compressão de imagem falhou.'));
+              }
+            },
+            'image/jpeg',
+            0.7 // 70% quality
+          );
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit before compression
         toast({
           title: "❌ Arquivo muito grande",
-          description: "A imagem deve ter no máximo 5MB.",
+          description: "A imagem deve ter no máximo 10MB.",
           variant: "destructive",
         });
         return;
       }
 
-      setFileToUpload(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFotoPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressedBlob = await compressImage(file);
+        setFileToUpload(compressedBlob);
+        setFotoPreview(URL.createObjectURL(compressedBlob));
+      } catch (error) {
+        toast({
+          title: "❌ Erro ao processar imagem",
+          description: "Não foi possível comprimir a imagem. Tente outra.",
+          variant: "destructive",
+        });
+        setFileToUpload(null);
+        setFotoPreview(null);
+      }
     }
   };
 
@@ -84,7 +122,9 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit, userRole }) => {
     let imagePath = loteToEdit?.foto || null;
 
     if (fileToUpload) {
-      const fileName = `${Date.now()}_${fileToUpload.name.replace(/\s/g, '_')}`;
+      const fileExtension = fileToUpload.type.split('/')[1] || 'jpg';
+      const fileName = `${Date.now()}_compressed.${fileExtension}`;
+      
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('fotos-lotes')
         .upload(fileName, fileToUpload, {
@@ -183,7 +223,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit, userRole }) => {
                         <div className="text-center p-4">
                           <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400 group-hover:scale-110 group-hover:text-sky-400 transition-all" />
                           <p className="text-lg font-semibold mb-2">Clique para fazer upload</p>
-                          <p className="text-sm text-slate-400">PNG, JPG até 5MB</p>
+                          <p className="text-sm text-slate-400">PNG, JPG (até 10MB)</p>
                         </div>
                       )}
                     </label>

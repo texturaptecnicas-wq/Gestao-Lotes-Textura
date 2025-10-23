@@ -213,26 +213,44 @@ function App() {
       toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir.", variant: "destructive" });
       return;
     }
+
+    const loteToDelete = lotes.find(l => l.id === id);
+    if (loteToDelete && loteToDelete.foto) {
+      const { error: storageError } = await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]);
+      if (storageError) {
+        toast({ title: "⚠️ Erro ao apagar foto", description: `A foto não foi removida do storage: ${storageError.message}`, variant: "destructive" });
+      }
+    }
+
     const { error } = await supabase.from('lotes').delete().eq('id', id);
     if (error) {
         toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" });
     } else {
         toast({ title: "🗑️ Lote removido", description: "Lote excluído com sucesso." });
     }
-  }, [userRole]);
+  }, [userRole, lotes]);
 
   const handleDeleteHistoricoLote = useCallback(async (id) => {
     if (userRole !== 'administrador') {
       toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir do histórico.", variant: "destructive" });
       return;
     }
+
+    const loteToDelete = historico.find(l => l.id === id);
+    if (loteToDelete && loteToDelete.foto) {
+      const { error: storageError } = await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]);
+      if (storageError) {
+        toast({ title: "⚠️ Erro ao apagar foto", description: `A foto não foi removida do storage: ${storageError.message}`, variant: "destructive" });
+      }
+    }
+
     const { error } = await supabase.from('historico').delete().eq('id', id);
     if (error) {
         toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" });
     } else {
         toast({ title: "🗑️ Lote removido do histórico", description: "Lote excluído." });
     }
-  }, [userRole]);
+  }, [userRole, historico]);
   
   const resetAllFilters = useCallback(() => {
     setSearchTerm('');
