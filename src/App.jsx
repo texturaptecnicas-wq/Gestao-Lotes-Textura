@@ -1,10 +1,8 @@
-
-import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, Info, LogOut, DollarSign, Ruler, FileText, FilterX, Loader2 } from 'lucide-react';
-import { db } from '@/firebase';
-import { ref, onValue, set, remove, update } from 'firebase/database';
+import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, Info, LogOut, DollarSign, Ruler, FileText, FilterX } from 'lucide-react';
+import { supabase } from '@/lib/customSupabaseClient';
 import { Toaster } from '@/components/ui/toaster';
 import { toast } from '@/components/ui/use-toast';
 import LoteCard from '@/components/LoteCard';
@@ -14,74 +12,68 @@ const HistoricoModal = React.lazy(() => import('@/components/HistoricoModal'));
 const QRScannerModal = React.lazy(() => import('@/components/QRScannerModal'));
 const LoginScreen = React.lazy(() => import('@/components/LoginScreen'));
 
-const LoadingFallback = ({ text = "Carregando..." }) => (
+const LoadingFallback = () => (
   <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100]">
-    <div className="flex flex-col items-center gap-4">
-      <Loader2 className="w-8 h-8 text-sky-300 animate-spin" />
-      <span className="text-white font-semibold">{text}</span>
-    </div>
+    <div className="text-white font-semibold">Carregando...</div>
   </div>
 );
 
 function App() {
   const [lotes, setLotes] = useState([]);
   const [historico, setHistorico] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isHistoricoOpen, setIsHistoricoOpen] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
   const [editingLote, setEditingLote] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('todos');
-  const [statusFilters, setStatusFilters] = useState({ pago: 'any', medida: 'any', notaFiscal: 'any' });
+  const [statusFilters, setStatusFilters] = useState({ pago: 'any', medida: 'any', nota_fiscal: 'any' });
   const [userRole, setUserRole] = useState(null);
-  const bufferRef = useRef({ data: [], timeout: null });
 
   useEffect(() => {
     const storedRole = localStorage.getItem('userRole');
     if (storedRole) {
       setUserRole(storedRole);
-    } else {
-      setIsLoading(false);
     }
   }, []);
+
+  const fetchLotes = useCallback(async () => {
+    const { data, error } = await supabase.from('lotes').select('*');
+    if (error) {
+      toast({ title: "❌ Erro ao buscar lotes", description: error.message, variant: "destructive" });
+    } else {
+      setLotes(data.map(d => ({ ...d, notaFiscal: d.nota_fiscal, prazoEntrega: d.prazo_entrega, metodoPagamento: d.metodo_pagamento, dataCriacao: d.data_criacao })));
+    }
+  }, [toast]);
+
+  const fetchHistorico = useCallback(async () => {
+    const { data, error } = await supabase.from('historico').select('*').order('data_entrega', { ascending: false });
+    if (error) {
+      toast({ title: "❌ Erro ao buscar histórico", description: error.message, variant: "destructive" });
+    } else {
+      setHistorico(data.map(d => ({ ...d, notaFiscal: d.nota_fiscal, prazoEntrega: d.prazo_entrega, metodoPagamento: d.metodo_pagamento, dataCriacao: d.data_criacao, dataEntrega: d.data_entrega })));
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (!userRole) return;
 
-    setIsLoading(true);
-    const lotesRef = ref(db, 'lotes');
-    const historicoRef = ref(db, 'historico');
+    fetchLotes();
+    fetchHistorico();
 
-    const unsubscribeLotes = onValue(lotesRef, snapshot => {
-      const data = snapshot.val();
-      const lotesArray = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
-      
-      bufferRef.current.data = lotesArray;
-      if (!bufferRef.current.timeout) {
-        bufferRef.current.timeout = setTimeout(() => {
-          setLotes(bufferRef.current.data);
-          if (isLoading) setIsLoading(false);
-          bufferRef.current.timeout = null;
-        }, 250);
-      }
-    });
+    const lotesSubscription = supabase.channel('public:lotes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lotes' }, fetchLotes)
+      .subscribe();
 
-    const unsubscribeHistorico = onValue(historicoRef, snapshot => {
-      const data = snapshot.val();
-      const historicoArray = data ? Object.keys(data).map(key => ({
-        id: key,
-        ...data[key]
-      })).sort((a, b) => new Date(b.dataEntrega) - new Date(a.dataEntrega)) : [];
-      setHistorico(historicoArray);
-    });
+    const historicoSubscription = supabase.channel('public:historico')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'historico' }, fetchHistorico)
+      .subscribe();
 
     return () => {
-      if (bufferRef.current.timeout) clearTimeout(bufferRef.current.timeout);
-      unsubscribeLotes();
-      unsubscribeHistorico();
+      supabase.removeChannel(lotesSubscription);
+      supabase.removeChannel(historicoSubscription);
     };
-  }, [userRole]);
+  }, [userRole, fetchLotes, fetchHistorico]);
   
   const handleLogin = useCallback((role) => {
     localStorage.setItem('userRole', role);
@@ -91,8 +83,6 @@ function App() {
   const handleLogout = useCallback(() => {
     localStorage.removeItem('userRole');
     setUserRole(null);
-    setLotes([]);
-    setIsLoading(false);
   }, []);
 
   const handleOpenAddModal = useCallback(() => {
@@ -109,124 +99,148 @@ function App() {
     setIsAddModalOpen(true);
   }, [userRole]);
 
-  const handleAddOrUpdateLote = useCallback((loteData, id) => {
-    const loteId = id || Date.now().toString();
-    const loteRef = ref(db, `lotes/${loteId}`);
-    const timestamp = new Date().toISOString();
-
+  const handleAddOrUpdateLote = useCallback(async (loteData, id) => {
+    const dataToSave = {
+        cliente: loteData.cliente,
+        cor: loteData.cor,
+        quantidade: loteData.quantidade,
+        foto: loteData.foto,
+        prazo_entrega: loteData.prazoEntrega || null,
+        metodo_pagamento: loteData.metodoPagamento,
+        observacao: loteData.observacao,
+        updated_at: new Date().toISOString()
+    };
+    
     if (id) {
-      update(loteRef, { ...loteData, updatedAt: timestamp }).then(() => {
-        toast({
-          title: "✅ Lote atualizado!",
-          description: `O lote de ${loteData.cliente} foi modificado com sucesso.`
-        });
-      });
+      const { error } = await supabase.from('lotes').update(dataToSave).eq('id', id);
+      if (error) {
+        toast({ title: "❌ Erro ao atualizar", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "✅ Lote atualizado!", description: `O lote de ${loteData.cliente} foi modificado.` });
+      }
     } else {
-      const loteComId = {
-        ...loteData,
-        dataCriacao: timestamp,
-        updatedAt: timestamp,
+       const newLote = {
+        ...dataToSave,
         pago: 'unanalysed',
         medida: 'unanalysed',
-        notaFiscal: 'unanalysed',
+        nota_fiscal: 'unanalysed',
         programado: false,
         pintado: false,
         promessa: false,
+        data_criacao: new Date().toISOString()
       };
-      set(loteRef, loteComId).then(() => {
-        toast({
-          title: "✅ Lote registrado!",
-          description: `Lote de ${loteData.cliente} adicionado com sucesso.`
-        });
-      });
+      const { error } = await supabase.from('lotes').insert(newLote);
+      if (error) {
+        toast({ title: "❌ Erro ao adicionar", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "✅ Lote registrado!", description: `Lote de ${loteData.cliente} adicionado.` });
+      }
     }
     setEditingLote(null);
-  }, []);
+  }, [toast]);
 
-  const handleUpdateLoteStatus = useCallback((id, updates) => {
-    const loteRef = ref(db, `lotes/${id}`);
+  const handleUpdateLoteStatus = useCallback(async (id, updates) => {
     const loteOriginal = lotes.find(l => l.id === id);
-
     if (!loteOriginal) return;
 
-    const finalUpdates = { ...updates, updatedAt: new Date().toISOString() };
-
+    const finalUpdates = { ...updates };
     if (finalUpdates.programado === true) finalUpdates.pintado = false;
     if (finalUpdates.programado === false && loteOriginal.programado) finalUpdates.promessa = false;
     if (finalUpdates.pintado === true) finalUpdates.programado = false;
-
-    if(finalUpdates.promessa === true && !loteOriginal.programado) {
-      toast({
-        title: "⚠️ Ação inválida",
-        description: "Marque o lote como 'Programado p/ Hoje' antes de definir como promessa.",
-        variant: "destructive"
-      });
+    if (finalUpdates.promessa === true && !loteOriginal.programado) {
+      toast({ title: "⚠️ Ação inválida", description: "Marque o lote como 'Programado p/ Hoje' antes.", variant: "destructive" });
       return;
     }
+    
+    finalUpdates.updated_at = new Date().toISOString();
 
-    update(loteRef, finalUpdates).then(() => {
-      toast({
-        title: "✅ Status atualizado!",
-        description: "As informações foram atualizadas com sucesso."
-      });
-    });
-  }, [lotes]);
+    const { error } = await supabase.from('lotes').update(finalUpdates).eq('id', id);
+    if (error) {
+      toast({ title: "❌ Erro ao atualizar status", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "✅ Status atualizado!", description: "Informações atualizadas." });
+    }
+  }, [lotes, toast]);
 
-  const handleMarcarPintadoPorQR = useCallback((id) => {
+  const handleMarcarPintadoPorQR = useCallback(async (id) => {
     const loteOriginal = lotes.find(l => l.id === id);
-    if (loteOriginal && loteOriginal.pintado) {
-      toast({ title: "ℹ️ Status inalterado", description: "Este lote já estava marcado como pintado." });
+    if (!loteOriginal) return;
+    if (loteOriginal.pintado) {
+      toast({ title: "ℹ️ Status inalterado", description: "Este lote já estava pintado." });
       return;
     }
-    const loteRef = ref(db, `lotes/${id}`);
-    update(loteRef, { pintado: true, programado: false, updatedAt: new Date().toISOString() }).then(() => {
-      if (loteOriginal) {
-        toast({ title: "🎨 Lote marcado como pintado!", description: `O lote do cliente ${loteOriginal.cliente} foi atualizado.` });
-      }
-    });
-  }, [lotes]);
+    const { error } = await supabase.from('lotes').update({ pintado: true, programado: false, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) {
+        toast({ title: "❌ Erro", description: error.message, variant: "destructive" });
+    } else {
+        toast({ title: "🎨 Lote pintado!", description: `Lote de ${loteOriginal.cliente} atualizado.` });
+    }
+  }, [lotes, toast]);
 
-  const handleMarcarEntregue = useCallback((id) => {
+  const handleMarcarEntregue = useCallback(async (id) => {
     const loteToMove = lotes.find(l => l.id === id);
-    if (loteToMove) {
-      if (!(loteToMove.pago === 'ok' && loteToMove.medida === 'ok' && loteToMove.pintado)) {
-        toast({ title: "⚠️ Ação bloqueada", description: "Status 'Pago', 'Medida' devem estar verdes e o lote 'Pintado' para entregar.", variant: "destructive" });
-        return;
-      }
-      const loteEntregue = { ...loteToMove, dataEntrega: new Date().toISOString() };
-      const newHistoricoRef = ref(db, `historico/${id}`);
-      set(newHistoricoRef, loteEntregue).then(() => {
-        remove(ref(db, `lotes/${id}`)).then(() => {
-          toast({ title: "📦 Lote entregue!", description: `Lote de ${loteToMove.cliente} movido para o histórico.` });
-        });
-      });
-    }
-  }, [lotes]);
-
-  const handleDeleteLote = useCallback((id) => {
-    if (userRole !== 'administrador') {
-      toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir lotes.", variant: "destructive" });
+    if (!loteToMove) return;
+    
+    if (!(loteToMove.pago === 'ok' && loteToMove.medida === 'ok' && loteToMove.pintado)) {
+      toast({ title: "⚠️ Ação bloqueada", description: "Status 'Pago', 'Medida' e 'Pintado' devem estar OK.", variant: "destructive" });
       return;
     }
-    remove(ref(db, `lotes/${id}`)).then(() => {
-      toast({ title: "🗑️ Lote removido", description: "O lote foi excluído com sucesso." });
-    });
-  }, [userRole]);
 
-  const handleDeleteHistoricoLote = useCallback((id) => {
-    if (userRole !== 'administrador') {
-      toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir lotes do histórico.", variant: "destructive" });
+    const { notaFiscal, prazoEntrega, metodoPagamento, dataCriacao, ...restOfLote } = loteToMove;
+    const loteEntregue = {
+        ...restOfLote,
+        nota_fiscal: notaFiscal,
+        prazo_entrega: prazoEntrega,
+        metodo_pagamento: metodoPagamento,
+        data_criacao: dataCriacao,
+        data_entrega: new Date().toISOString()
+    };
+    
+    const { error: insertError } = await supabase.from('historico').insert(loteEntregue);
+    if (insertError) {
+      toast({ title: "❌ Erro ao mover", description: insertError.message, variant: "destructive" });
       return;
     }
-    remove(ref(db, `historico/${id}`)).then(() => {
-      toast({ title: "🗑️ Lote removido do histórico", description: "O lote entregue foi excluído com sucesso." });
-    });
-  }, [userRole]);
+
+    const { error: deleteError } = await supabase.from('lotes').delete().eq('id', id);
+    if (deleteError) {
+      toast({ title: "❌ Erro ao remover", description: deleteError.message, variant: "destructive" });
+      // Reverter?
+    } else {
+      toast({ title: "📦 Lote entregue!", description: `Lote de ${loteToMove.cliente} movido para o histórico.` });
+    }
+  }, [lotes, toast]);
+
+  const handleDeleteLote = useCallback(async (id) => {
+    if (userRole !== 'administrador') {
+      toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from('lotes').delete().eq('id', id);
+    if (error) {
+        toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" });
+    } else {
+        toast({ title: "🗑️ Lote removido", description: "Lote excluído com sucesso." });
+    }
+  }, [userRole, toast]);
+
+  const handleDeleteHistoricoLote = useCallback(async (id) => {
+    if (userRole !== 'administrador') {
+      toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir do histórico.", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from('historico').delete().eq('id', id);
+    if (error) {
+        toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" });
+    } else {
+        toast({ title: "🗑️ Lote removido do histórico", description: "Lote excluído." });
+    }
+  }, [userRole, toast]);
   
   const resetAllFilters = useCallback(() => {
     setSearchTerm('');
     setFilterStatus('todos');
-    setStatusFilters({ pago: 'any', medida: 'any', notaFiscal: 'any' });
+    setStatusFilters({ pago: 'any', medida: 'any', nota_fiscal: 'any' });
   }, []);
   
   const handleFilterChange = useCallback((newFilter) => {
@@ -246,7 +260,7 @@ function App() {
         if (lowerSearchTerm && !lote.cliente?.toLowerCase().includes(lowerSearchTerm) && !lote.cor?.toLowerCase().includes(lowerSearchTerm)) return false;
         if (statusFilters.pago !== 'any' && lote.pago !== statusFilters.pago) return false;
         if (statusFilters.medida !== 'any' && lote.medida !== statusFilters.medida) return false;
-        if (statusFilters.notaFiscal !== 'any' && lote.notaFiscal !== statusFilters.notaFiscal) return false;
+        if (statusFilters.nota_fiscal !== 'any' && lote.nota_fiscal !== statusFilters.nota_fiscal) return false;
         switch (filterStatus) {
           case 'recebido': return !lote.programado && !lote.pintado;
           case 'programado': return lote.programado && !lote.pintado;
@@ -257,7 +271,7 @@ function App() {
       .sort((a, b) => {
         if (a.promessa && !b.promessa) return -1;
         if (!a.promessa && b.promessa) return 1;
-        return new Date(b.dataCriacao) - new Date(a.dataCriacao);
+        return new Date(b.data_criacao) - new Date(a.data_criacao);
       });
   }, [lotes, searchTerm, filterStatus, statusFilters]);
 
@@ -289,10 +303,6 @@ function App() {
         <title>Sistema de Gestão de Lotes - Controle Industrial</title>
         <meta name="description" content="Sistema otimizado para gestão de lotes industriais com controle em tempo real." />
       </Helmet>
-      
-      <AnimatePresence>
-        {isLoading && <LoadingFallback text="Carregando lotes..." />}
-      </AnimatePresence>
 
       <div className="min-h-screen p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
@@ -331,14 +341,20 @@ function App() {
             <div className="flex flex-wrap items-center gap-4 mt-4">
               <div className="flex items-center gap-2"><DollarSign className="w-5 h-5 text-emerald-300 flex-shrink-0" /><select value={statusFilters.pago} onChange={e => handleStatusFilterChange('pago', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value="any">Pago (Todos)</option><option value="ok">Pago (OK)</option><option value="pending">Pago (Pendente)</option><option value="unanalysed">Pago (Não Analisado)</option></select></div>
               <div className="flex items-center gap-2"><Ruler className="w-5 h-5 text-cyan-300 flex-shrink-0" /><select value={statusFilters.medida} onChange={e => handleStatusFilterChange('medida', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value="any">Medida (Todos)</option><option value="ok">Medida (OK)</option><option value="pending">Medida (Pendente)</option><option value="unanalysed">Medida (Não Analisado)</option></select></div>
-              <div className="flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-300 flex-shrink-0" /><select value={statusFilters.notaFiscal} onChange={e => handleStatusFilterChange('notaFiscal', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value="any">NF (Todos)</option><option value="ok">NF (OK)</option><option value="pending">NF (Pendente)</option><option value="unanalysed">NF (Não Analisado)</option></select></div>
+              <div className="flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-300 flex-shrink-0" /><select value={statusFilters.nota_fiscal} onChange={e => handleStatusFilterChange('nota_fiscal', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"><option value="any">NF (Todos)</option><option value="ok">NF (OK)</option><option value="pending">NF (Pendente)</option><option value="unanalysed">NF (Não Analisado)</option></select></div>
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={resetAllFilters} className="glass-effect px-4 py-1.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-slate-700/60 transition-all text-sm"><FilterX className="w-4 h-4" />Limpar</motion.button>
             </div>
           </motion.header>
           <div className="glass-effect rounded-xl p-3 mb-6 flex items-center gap-3 text-sm text-slate-300"><Info className="w-5 h-5 text-sky-300 flex-shrink-0" /><p><span className="font-bold text-white">Legenda:</span> Cinza: não analisado. Vermelho: pendente. Verde: OK.</p></div>
           
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            {!isLoading && filteredLotes.length === 0 ? (
+            {lotes.length === 0 && searchTerm === '' && filterStatus === 'todos' ? (
+                <div className="text-center p-12 glass-effect rounded-2xl">
+                    <Package className="w-16 h-16 mx-auto mb-4 text-slate-500 animate-pulse" />
+                    <h3 className="text-2xl font-bold mb-2">Carregando lotes...</h3>
+                    <p className="text-slate-400">Só um momento, estamos buscando os dados.</p>
+                </div>
+            ) : filteredLotes.length === 0 ? (
               <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-effect p-12 rounded-2xl text-center">
                 <Package className="w-16 h-16 mx-auto mb-4 text-slate-500" />
                 <h3 className="text-2xl font-bold mb-2">Nenhum lote encontrado</h3>
@@ -367,9 +383,9 @@ function App() {
         </div>
 
         <Suspense fallback={<LoadingFallback />}>
-          {isAddModalOpen && <AddLoteModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddOrUpdateLote} loteToEdit={editingLote} />}
-          {isHistoricoOpen && <HistoricoModal isOpen={isHistoricoOpen} onClose={() => setIsHistoricoOpen(false)} historico={historico} onDelete={handleDeleteHistoricoLote} userRole={userRole} />}
-          {isQRScannerOpen && <QRScannerModal isOpen={isQRScannerOpen} onClose={() => setIsQRScannerOpen(false)} onScan={handleMarcarPintadoPorQR} lotes={lotes} />}
+          <AddLoteModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddOrUpdateLote} loteToEdit={editingLote} />
+          <HistoricoModal isOpen={isHistoricoOpen} onClose={() => setIsHistoricoOpen(false)} historico={historico} onDelete={handleDeleteHistoricoLote} userRole={userRole} />
+          <QRScannerModal isOpen={isQRScannerOpen} onClose={() => setIsQRScannerOpen(false)} onScan={handleMarcarPintadoPorQR} lotes={lotes} />
         </Suspense>
         
         <Toaster />

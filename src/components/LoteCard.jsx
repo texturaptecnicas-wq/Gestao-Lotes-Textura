@@ -1,8 +1,10 @@
+
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, CreditCard, FileImage as ImageIcon, Lock, Star, MessageSquare } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, CreditCard, Lock, Star, MessageSquare, Eye, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
+import { supabase } from '@/lib/customSupabaseClient';
 
 const StatusButton = React.memo(({ Icon, label, status, onClick, isDisabled = false }) => {
   const colorMap = {
@@ -46,9 +48,34 @@ const SimpleStatusButton = React.memo(({ Icon, label, isActive, onClick, colorCl
 const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit }) => {
   const [showQR, setShowQR] = useState(false);
   const [showImage, setShowImage] = useState(false);
+  const [imageUrl, setImageUrl] = useState(null);
+  const [isLoadingImage, setIsLoadingImage] = useState(false);
+
+  const handleShowImage = async () => {
+    if (!lote.foto) {
+      toast({ title: "ℹ️ Sem imagem", description: "Nenhuma imagem foi cadastrada para este lote." });
+      return;
+    }
+    setIsLoadingImage(true);
+    setShowImage(true);
+    
+    const { data } = supabase.storage.from('fotos-lotes').getPublicUrl(lote.foto);
+    if(data.publicUrl) {
+      // Append a timestamp to break browser cache
+      setImageUrl(`${data.publicUrl}?t=${new Date().getTime()}`);
+    } else {
+       toast({ title: "❌ Erro ao carregar imagem", description: "Não foi possível obter a URL da imagem.", variant: "destructive" });
+       setIsLoadingImage(false);
+       setShowImage(false);
+    }
+  };
+
+  const onImageLoad = () => {
+    setIsLoadingImage(false);
+  };
 
   const handleToggleStatus = (field, currentStatus) => {
-    if (userRole !== 'administrador' && ['pago', 'medida', 'notaFiscal'].includes(field)) {
+    if (userRole !== 'administrador' && ['pago', 'medida', 'nota_fiscal'].includes(field)) {
       toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para alterar este status.", variant: "destructive" });
       return;
     }
@@ -96,16 +123,19 @@ const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onD
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
                 <StatusButton Icon={DollarSign} label="Pago" status={lote.pago} onClick={() => handleToggleStatus('pago', lote.pago)} isDisabled={!isAdmin} />
                 <StatusButton Icon={Ruler} label="Medida" status={lote.medida} onClick={() => handleToggleStatus('medida', lote.medida)} isDisabled={!isAdmin} />
-                <StatusButton Icon={FileText} label="NF" status={lote.notaFiscal} onClick={() => handleToggleStatus('notaFiscal', lote.notaFiscal)} isDisabled={!isAdmin} />
+                <StatusButton Icon={FileText} label="NF" status={lote.nota_fiscal} onClick={() => handleToggleStatus('nota_fiscal', lote.nota_fiscal)} isDisabled={!isAdmin} />
               </div>
               <div className="flex-grow min-w-0 text-center flex flex-col items-center">
-                  <div className="relative w-24 h-24 flex-shrink-0 bg-slate-900/50 rounded-lg flex items-center justify-center cursor-pointer overflow-hidden mb-2" onClick={() => lote.foto && setShowImage(true)}>
-                      {lote.foto ? <img loading="lazy" src={lote.foto} alt={`Lote ${lote.cliente}`} className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform duration-300" width="96" height="96" /> : <ImageIcon className="w-8 h-8 text-slate-500" />}
+                  <div className="w-24 h-24 flex-shrink-0 bg-slate-900/50 rounded-lg flex items-center justify-center cursor-pointer overflow-hidden mb-2 group/eye" onClick={handleShowImage}>
+                     <div className="flex flex-col items-center justify-center gap-1 text-slate-400 group-hover/eye:text-sky-300 group-hover/eye:scale-110 transition-all duration-300">
+                      <Eye className="w-8 h-8"/>
+                      <span className="text-xs font-bold">Ver Foto</span>
+                     </div>
                   </div>
                   <div className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold text-white ${getStatusColor()} mb-1 shadow-md`}>{getStatusText()}</div>
                   <h3 className="text-base font-bold text-shadow-lg text-slate-100 truncate w-full">{lote.cliente}</h3>
                   <p className="text-xs text-slate-300 text-shadow truncate w-full">{lote.cor} • {lote.quantidade ? `${lote.quantidade} peças` : 'N/A'}</p>
-                  {lote.prazoEntrega && <div className="mt-1 glass-effect px-2 py-0.5 rounded-md inline-flex items-center gap-1.5 text-xs font-semibold text-slate-200"><CalendarIcon className="w-3 h-3 text-sky-300" /><span>{formatDate(lote.prazoEntrega)}</span></div>}
+                  {lote.prazo_entrega && <div className="mt-1 glass-effect px-2 py-0.5 rounded-md inline-flex items-center gap-1.5 text-xs font-semibold text-slate-200"><CalendarIcon className="w-3 h-3 text-sky-300" /><span>{formatDate(lote.prazo_entrega)}</span></div>}
               </div>
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
                 <SimpleStatusButton Icon={CalendarCheck} label="Progr." isActive={lote.programado} onClick={() => onUpdateStatus(lote.id, { programado: !lote.programado })} colorClass="programado" />
@@ -116,9 +146,9 @@ const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onD
                 </motion.button>
               </div>
           </div>
-          {(lote.metodoPagamento || lote.observacao) && (
+          {(lote.metodo_pagamento || lote.observacao) && (
             <div className="glass-effect rounded-lg p-2 text-[11px] mt-auto space-y-1">
-                {lote.metodoPagamento && <div className="flex items-center gap-2 text-slate-300"><CreditCard className="w-3 h-3 flex-shrink-0 text-sky-300" /><span>Pgto: <strong>{lote.metodoPagamento}</strong></span></div>}
+                {lote.metodo_pagamento && <div className="flex items-center gap-2 text-slate-300"><CreditCard className="w-3 h-3 flex-shrink-0 text-sky-300" /><span>Pgto: <strong>{lote.metodo_pagamento}</strong></span></div>}
                 {lote.observacao && <div className="flex items-start gap-2 text-slate-300"><MessageSquare className="w-3 h-3 flex-shrink-0 text-amber-300 mt-0.5" /><span className="line-clamp-2">{lote.observacao}</span></div>}
             </div>
           )}
@@ -133,11 +163,12 @@ const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onD
         </div>
       </motion.div>
       {showQR && <QRCodeGenerator loteId={lote.id} cliente={lote.cliente} onClose={() => setShowQR(false)} />}
-      {showImage && lote.foto && (
+      {showImage && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowImage(false)} className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-          <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} onClick={(e) => e.stopPropagation()} className="relative max-w-4xl w-full">
-            <motion.button whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.9 }} onClick={() => setShowImage(false)} className="absolute -top-12 right-0 p-2 bg-white/20 backdrop-blur-md rounded-lg hover:bg-white/30 transition-all text-white/80 hover:text-white"><X className="w-6 h-6" /></motion.button>
-            <img src={lote.foto} alt={`Lote ${lote.cliente}`} className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl" />
+          <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} onClick={(e) => e.stopPropagation()} className="relative max-w-4xl w-full flex items-center justify-center">
+            <motion.button whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.9 }} onClick={() => setShowImage(false)} className="absolute -top-12 right-0 p-2 bg-white/20 backdrop-blur-md rounded-lg hover:bg-white/30 transition-all text-white/80 hover:text-white z-10"><X className="w-6 h-6" /></motion.button>
+            {isLoadingImage && <Loader2 className="w-16 h-16 text-white animate-spin absolute" />}
+            <img src={imageUrl} alt={`Lote ${lote.cliente}`} className={`w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl transition-opacity duration-300 ${isLoadingImage ? 'opacity-0' : 'opacity-100'}`} onLoad={onImageLoad} style={{ display: imageUrl ? 'block' : 'none' }} />
           </motion.div>
         </motion.div>
       )}
@@ -146,7 +177,7 @@ const LoteCard = ({ lote, index, userRole, onUpdateStatus, onMarcarEntregue, onD
 };
 
 const areEqual = (prevProps, nextProps) => {
-  return prevProps.lote.id === nextProps.lote.id && prevProps.lote.updatedAt === nextProps.lote.updatedAt;
+  return prevProps.lote.id === nextProps.lote.id && prevProps.lote.updated_at === nextProps.lote.updated_at;
 };
 
 export default React.memo(LoteCard, areEqual);

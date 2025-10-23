@@ -13,7 +13,7 @@ const HistoricoModal = ({ isOpen, onClose, historico, onDelete, userRole }) => {
   
   const lotesAgrupados = useMemo(() => {
     return filteredHistorico.reduce((acc, lote) => {
-      const date = new Date(lote.dataEntrega);
+      const date = new Date(lote.data_entrega);
       const monthYear = date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
       const capitalizedMonth = monthYear.charAt(0).toUpperCase() + monthYear.slice(1);
 
@@ -107,11 +107,7 @@ const HistoricoModal = ({ isOpen, onClose, historico, onDelete, userRole }) => {
                           >
                             <div className="flex items-start gap-4">
                               <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-slate-900/50">
-                                <img
-                                  src={lote.foto}
-                                  alt={lote.cliente}
-                                  className="w-full h-full object-contain"
-                                />
+                                {lote.foto ? <img src={lote.foto} alt={lote.cliente} className="w-full h-full object-contain" /> : <Package className="w-10 h-10 text-slate-600 m-auto"/>}
                               </div>
                               
                               <div className="flex-1 min-w-0">
@@ -146,7 +142,7 @@ const HistoricoModal = ({ isOpen, onClose, historico, onDelete, userRole }) => {
                                 
                                 <div className="flex items-center gap-2 text-sm text-slate-400">
                                   <Calendar className="w-4 h-4" />
-                                  <span>Entregue em {formatDate(lote.dataEntrega)}</span>
+                                  <span>Entregue em {formatDate(lote.data_entrega)}</span>
                                 </div>
                               </div>
                             </div>
@@ -194,7 +190,7 @@ const HistoricoModal = ({ isOpen, onClose, historico, onDelete, userRole }) => {
                     {selectedLote.cor} • {selectedLote.quantidade} peças
                   </p>
                   <p className="text-sm text-slate-400 mt-2">
-                    Entregue em {formatDate(selectedLote.dataEntrega)}
+                    Entregue em {formatDate(selectedLote.data_entrega)}
                   </p>
                 </div>
               </motion.div>

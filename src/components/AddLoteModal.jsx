@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Calendar, CreditCard, MessageSquare } from 'lucide-react';
+import { X, Upload, Calendar, CreditCard, MessageSquare, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/customSupabaseClient';
 
 const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
   const getInitialState = () => ({
@@ -16,6 +18,8 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
 
   const [formData, setFormData] = useState(getInitialState());
   const [fotoPreview, setFotoPreview] = useState(null);
+  const [fileToUpload, setFileToUpload] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -25,14 +29,16 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
           cor: loteToEdit.cor || '',
           quantidade: loteToEdit.quantidade || '',
           foto: loteToEdit.foto || null,
-          prazoEntrega: loteToEdit.prazoEntrega || '',
-          metodoPagamento: loteToEdit.metodoPagamento || '',
+          prazoEntrega: loteToEdit.prazo_entrega ? loteToEdit.prazo_entrega.split('T')[0] : '',
+          metodoPagamento: loteToEdit.metodo_pagamento || '',
           observacao: loteToEdit.observacao || '',
         });
-        setFotoPreview(loteToEdit.foto || null);
+        setFotoPreview(loteToEdit.foto ? `${supabase.storage.from('fotos-lotes').getPublicUrl(loteToEdit.foto).data.publicUrl}?t=${new Date().getTime()}` : null);
+        setFileToUpload(null);
       } else {
         setFormData(getInitialState());
         setFotoPreview(null);
+        setFileToUpload(null);
       }
     }
   }, [loteToEdit, isOpen]);
@@ -49,16 +55,16 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
         return;
       }
 
+      setFileToUpload(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData({ ...formData, foto: reader.result });
         setFotoPreview(reader.result);
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.cliente || !formData.cor) {
@@ -70,12 +76,38 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
       return;
     }
 
+    setIsUploading(true);
+    let imagePath = loteToEdit?.foto || null;
+
+    if (fileToUpload) {
+      const fileName = `${Date.now()}_${fileToUpload.name.replace(/\s/g, '_')}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('fotos-lotes')
+        .upload(fileName, fileToUpload, {
+          cacheControl: '3600',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        toast({ title: "❌ Erro no upload", description: uploadError.message, variant: "destructive" });
+        setIsUploading(false);
+        return;
+      }
+      imagePath = uploadData.path;
+    }
+    
     const dataToSave = {
-      ...formData,
+      cliente: formData.cliente,
+      cor: formData.cor,
       quantidade: parseInt(formData.quantidade) || 0,
+      foto: imagePath,
+      prazoEntrega: formData.prazoEntrega || null,
+      metodoPagamento: formData.metodoPagamento,
+      observacao: formData.observacao,
     };
     
-    onSave(dataToSave, loteToEdit?.id);
+    await onSave(dataToSave, loteToEdit?.id);
+    setIsUploading(false);
     handleClose();
   };
 
@@ -128,6 +160,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                       onChange={handleImageUpload}
                       className="hidden"
                       id="foto-upload"
+                      disabled={isUploading}
                     />
                     <label
                       htmlFor="foto-upload"
@@ -166,6 +199,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                       onChange={(e) => setFormData({ ...formData, cliente: e.target.value })}
                       placeholder="Ex: João Silva"
                       className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                      disabled={isUploading}
                     />
                   </div>
                   <div>
@@ -178,6 +212,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                       onChange={(e) => setFormData({ ...formData, cor: e.target.value })}
                       placeholder="Ex: Azul Marinho"
                       className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                      disabled={isUploading}
                     />
                   </div>
                 </div>
@@ -194,6 +229,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                         onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
                         placeholder="Ex: 50"
                         className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                        disabled={isUploading}
                       />
                     </div>
                     <div>
@@ -207,6 +243,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                           onChange={(e) => setFormData({ ...formData, prazoEntrega: e.target.value })}
                           className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all"
                           style={{ colorScheme: 'dark' }}
+                          disabled={isUploading}
                         />
                          <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                       </div>
@@ -225,6 +262,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                         onChange={(e) => setFormData({ ...formData, metodoPagamento: e.target.value })}
                         placeholder="Ex: PIX, Cartão, Boleto"
                         className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                        disabled={isUploading}
                       />
                     </div>
                 </div>
@@ -240,6 +278,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                     placeholder="Adicione uma observação sobre o lote..."
                     rows="3"
                     className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                    disabled={isUploading}
                   />
                 </div>
 
@@ -250,6 +289,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                     whileTap={{ scale: 0.98 }}
                     onClick={handleClose}
                     className="flex-1 glass-effect px-6 py-3 rounded-xl font-semibold hover:bg-slate-700/60 transition-all"
+                    disabled={isUploading}
                   >
                     Cancelar
                   </motion.button>
@@ -257,9 +297,11 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                     type="submit"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-500 px-6 py-3 rounded-xl font-semibold hover:from-sky-600 hover:to-indigo-600 transition-all shadow-lg shadow-sky-500/30"
+                    className="flex-1 bg-gradient-to-r from-sky-500 to-indigo-500 px-6 py-3 rounded-xl font-semibold hover:from-sky-600 hover:to-indigo-600 transition-all shadow-lg shadow-sky-500/30 flex items-center justify-center gap-2"
+                    disabled={isUploading}
                   >
-                    {isEditing ? 'Salvar Alterações' : 'Adicionar Lote'}
+                    {isUploading && <Loader2 className="w-5 h-5 animate-spin" />}
+                    {isUploading ? 'Salvando...' : isEditing ? 'Salvar Alterações' : 'Adicionar Lote'}
                   </motion.button>
                 </div>
               </form>
