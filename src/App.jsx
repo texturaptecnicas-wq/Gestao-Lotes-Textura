@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -44,7 +45,7 @@ function App() {
     } else {
       setLotes(data.map(d => ({ ...d, notaFiscal: d.nota_fiscal, prazoEntrega: d.prazo_entrega, metodoPagamento: d.metodo_pagamento, dataCriacao: d.data_criacao })));
     }
-  }, [toast]);
+  }, []);
 
   const fetchHistorico = useCallback(async () => {
     const { data, error } = await supabase.from('historico').select('*').order('data_entrega', { ascending: false });
@@ -53,7 +54,7 @@ function App() {
     } else {
       setHistorico(data.map(d => ({ ...d, notaFiscal: d.nota_fiscal, prazoEntrega: d.prazo_entrega, metodoPagamento: d.metodo_pagamento, dataCriacao: d.data_criacao, dataEntrega: d.data_entrega })));
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     if (!userRole) return;
@@ -91,13 +92,9 @@ function App() {
   }, []);
 
   const handleOpenEditModal = useCallback((loteToEdit) => {
-    if (userRole !== 'administrador') {
-      toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para editar lotes.", variant: "destructive" });
-      return;
-    }
     setEditingLote(loteToEdit);
     setIsAddModalOpen(true);
-  }, [userRole]);
+  }, []);
 
   const handleAddOrUpdateLote = useCallback(async (loteData, id) => {
     const dataToSave = {
@@ -137,7 +134,7 @@ function App() {
       }
     }
     setEditingLote(null);
-  }, [toast]);
+  }, []);
 
   const handleUpdateLoteStatus = useCallback(async (id, updates) => {
     const loteOriginal = lotes.find(l => l.id === id);
@@ -160,7 +157,7 @@ function App() {
     } else {
       toast({ title: "✅ Status atualizado!", description: "Informações atualizadas." });
     }
-  }, [lotes, toast]);
+  }, [lotes]);
 
   const handleMarcarPintadoPorQR = useCallback(async (id) => {
     const loteOriginal = lotes.find(l => l.id === id);
@@ -175,7 +172,7 @@ function App() {
     } else {
         toast({ title: "🎨 Lote pintado!", description: `Lote de ${loteOriginal.cliente} atualizado.` });
     }
-  }, [lotes, toast]);
+  }, [lotes]);
 
   const handleMarcarEntregue = useCallback(async (id) => {
     const loteToMove = lotes.find(l => l.id === id);
@@ -209,7 +206,7 @@ function App() {
     } else {
       toast({ title: "📦 Lote entregue!", description: `Lote de ${loteToMove.cliente} movido para o histórico.` });
     }
-  }, [lotes, toast]);
+  }, [lotes]);
 
   const handleDeleteLote = useCallback(async (id) => {
     if (userRole !== 'administrador') {
@@ -222,7 +219,7 @@ function App() {
     } else {
         toast({ title: "🗑️ Lote removido", description: "Lote excluído com sucesso." });
     }
-  }, [userRole, toast]);
+  }, [userRole]);
 
   const handleDeleteHistoricoLote = useCallback(async (id) => {
     if (userRole !== 'administrador') {
@@ -235,7 +232,7 @@ function App() {
     } else {
         toast({ title: "🗑️ Lote removido do histórico", description: "Lote excluído." });
     }
-  }, [userRole, toast]);
+  }, [userRole]);
   
   const resetAllFilters = useCallback(() => {
     setSearchTerm('');
@@ -383,7 +380,7 @@ function App() {
         </div>
 
         <Suspense fallback={<LoadingFallback />}>
-          <AddLoteModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddOrUpdateLote} loteToEdit={editingLote} />
+          <AddLoteModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddOrUpdateLote} loteToEdit={editingLote} userRole={userRole} />
           <HistoricoModal isOpen={isHistoricoOpen} onClose={() => setIsHistoricoOpen(false)} historico={historico} onDelete={handleDeleteHistoricoLote} userRole={userRole} />
           <QRScannerModal isOpen={isQRScannerOpen} onClose={() => setIsQRScannerOpen(false)} onScan={handleMarcarPintadoPorQR} lotes={lotes} />
         </Suspense>

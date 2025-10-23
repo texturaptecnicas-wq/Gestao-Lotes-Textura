@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Calendar, CreditCard, MessageSquare, Loader2 } from 'lucide-react';
+import { X, Upload, Calendar, CreditCard, MessageSquare, Loader2, Lock } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 
-const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
+const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit, userRole }) => {
   const getInitialState = () => ({
     cliente: '',
     cor: '',
@@ -20,6 +20,10 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
   const [fotoPreview, setFotoPreview] = useState(null);
   const [fileToUpload, setFileToUpload] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  const isEditing = !!loteToEdit;
+  const isAdmin = userRole === 'administrador';
+  const canEditRestrictedFields = !isEditing || isAdmin;
 
   useEffect(() => {
     if (isOpen) {
@@ -114,8 +118,6 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
   const handleClose = () => {
     onClose();
   };
-  
-  const isEditing = !!loteToEdit;
 
   return (
     <AnimatePresence>
@@ -232,7 +234,7 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                         disabled={isUploading}
                       />
                     </div>
-                    <div>
+                    <div className="relative">
                       <label className="block text-sm font-semibold mb-2 text-slate-200">
                         Prazo de Entrega
                       </label>
@@ -243,31 +245,31 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                           onChange={(e) => setFormData({ ...formData, prazoEntrega: e.target.value })}
                           className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all"
                           style={{ colorScheme: 'dark' }}
-                          disabled={isUploading}
+                          disabled={isUploading || !canEditRestrictedFields}
                         />
                          <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                       </div>
+                      {!canEditRestrictedFields && <Lock className="absolute top-1 right-1 w-4 h-4 text-slate-300" />}
                     </div>
                 </div>
                 
-                <div className="grid grid-cols-1">
-                    <div>
-                      <label className="block text-sm font-semibold mb-2 text-slate-200">
-                        <CreditCard className="inline w-4 h-4 mr-2" />
-                        Método de Pagamento
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.metodoPagamento}
-                        onChange={(e) => setFormData({ ...formData, metodoPagamento: e.target.value })}
-                        placeholder="Ex: PIX, Cartão, Boleto"
-                        className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
-                        disabled={isUploading}
-                      />
-                    </div>
+                <div className="relative">
+                  <label className="block text-sm font-semibold mb-2 text-slate-200">
+                    <CreditCard className="inline w-4 h-4 mr-2" />
+                    Método de Pagamento
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.metodoPagamento}
+                    onChange={(e) => setFormData({ ...formData, metodoPagamento: e.target.value })}
+                    placeholder="Ex: PIX, Cartão, Boleto"
+                    className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                    disabled={isUploading || !canEditRestrictedFields}
+                  />
+                  {!canEditRestrictedFields && <Lock className="absolute top-1 right-1 w-4 h-4 text-slate-300" />}
                 </div>
 
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-semibold mb-2 text-slate-200">
                     <MessageSquare className="inline w-4 h-4 mr-2" />
                     Observação
@@ -278,8 +280,9 @@ const AddLoteModal = ({ isOpen, onClose, onSave, loteToEdit }) => {
                     placeholder="Adicione uma observação sobre o lote..."
                     rows="3"
                     className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all placeholder:text-slate-400"
-                    disabled={isUploading}
+                    disabled={isUploading || !canEditRestrictedFields}
                   />
+                  {!canEditRestrictedFields && <Lock className="absolute top-1 right-1 w-4 h-4 text-slate-300" />}
                 </div>
 
                 <div className="flex gap-4 pt-4">
