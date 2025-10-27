@@ -1,2 +1,0 @@
-## Pages
-- [Sistema de Gestão de Lotes - Controle Industrial](/): Sistema otimizado para gestão de lotes industriais com controle em tempo real.
