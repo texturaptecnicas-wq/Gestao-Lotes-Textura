@@ -322,11 +322,13 @@ function App() {
                   key={status.id} 
                   layout 
                   onClick={() => handleFilterChange(status.id)} 
-                  className={`relative w-full px-3 py-3 rounded-lg font-semibold whitespace-nowrap transition-colors flex items-center justify-center gap-2 text-sm ${filterStatus === status.id ? '' : 'text-slate-300 hover:text-white'} ${index === 2 ? 'col-span-2 md:col-span-1' : ''}`}
+                  className={`relative w-full px-2 py-3 rounded-lg font-semibold whitespace-nowrap transition-colors flex items-center justify-center gap-2 text-xs md:text-sm ${filterStatus === status.id ? '' : 'text-slate-300 hover:text-white'} ${index === 2 ? 'col-span-2 md:col-span-1' : ''}`}
                 >
                   {filterStatus === status.id && <motion.div layoutId="active-pill" className="absolute inset-0 bg-gradient-to-r from-sky-500 to-indigo-500 rounded-lg z-0" />}
-                  <div className="relative z-10 flex items-center gap-2">
-                    <status.icon className="w-5 h-5" /><span>{status.label}</span><span className="bg-slate-900/50 text-white text-base font-bold px-2.5 py-0.5 rounded-full">{status.count}</span>
+                  <div className="relative z-10 flex items-center gap-1.5 md:gap-2">
+                    <status.icon className="w-4 h-4 md:w-5 md:h-5" />
+                    <span className="truncate">{status.label}</span>
+                    <span className="bg-slate-900/50 text-white text-xs md:text-base font-bold px-2 py-0.5 rounded-full">{status.count}</span>
                   </div>
                 </motion.button>
               ))}
@@ -335,9 +337,9 @@ function App() {
             {filterStatus === 'programado' && (
               <div className="mt-4 glass-effect rounded-xl p-1 flex items-center gap-1 flex-wrap">
                 {cabineFilterOptions.map(cab => (
-                   <motion.button key={cab} layout onClick={() => setCabineFilter(cab)} className={`relative flex-1 px-3 py-2 rounded-lg font-semibold transition-colors text-sm min-w-[90px] ${cabineFilter === cab ? '' : 'text-slate-300 hover:text-white'}`}>
+                   <motion.button key={cab} layout onClick={() => setCabineFilter(cab)} className={`relative flex-1 px-3 py-2 rounded-lg font-semibold transition-colors text-sm min-w-[80px] ${cabineFilter === cab ? '' : 'text-slate-300 hover:text-white'}`}>
                     {cabineFilter === cab && <motion.div layoutId="active-cabine-pill" className="absolute inset-0 bg-slate-700/80 rounded-lg z-0" />}
-                    <span className="relative z-10">{cab === 'all' ? 'Todas' : `Cabine ${cab}`}</span>
+                    <span className="relative z-10">{cab === 'all' ? 'Todas' : `Cab. ${cab}`}</span>
                    </motion.button>
                 ))}
               </div>
