@@ -9,15 +9,23 @@ import { toast } from '@/components/ui/use-toast';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import LoteCard from '@/components/LoteCard';
 
+// Lazy loaded components
 const AddLoteModal = React.lazy(() => import('@/components/AddLoteModal'));
 const HistoricoModal = React.lazy(() => import('@/components/HistoricoModal'));
 const QRScannerModal = React.lazy(() => import('@/components/QRScannerModal'));
 const LoginScreen = React.lazy(() => import('@/components/LoginScreen'));
+const FinanceLogin = React.lazy(() => import('@/components/FinanceLogin'));
+const FinanceModule = React.lazy(() => import('@/components/FinanceModule'));
 const CabineSelectModal = React.lazy(() => import('@/components/CabineSelectModal'));
+// Keeping PIXRegistrationModal import but ensuring it's not auto-triggered
+const PIXRegistrationModal = React.lazy(() => import('@/components/PIXRegistrationModal'));
 
 const LoadingFallback = () => (
-  <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[100]">
-    <div className="text-white font-semibold">Carregando...</div>
+  <div className="fixed inset-0 bg-slate-900 backdrop-blur-sm flex items-center justify-center z-[100]">
+    <div className="flex flex-col items-center gap-3">
+       <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
+       <div className="text-white font-semibold animate-pulse">Carregando...</div>
+    </div>
   </div>
 );
 
@@ -34,64 +42,105 @@ function App() {
   const [filterStatus, setFilterStatus] = useState('recebido');
   const [statusFilters, setStatusFilters] = useState({ pago: 'any', medida: 'any', nota_fiscal: 'any' });
   const [cabineFilter, setCabineFilter] = useState('1');
-  const [userRole, setUserRole] = useState(null);
+  
+  // Finance Flow State
+  const [financeFlowLote, setFinanceFlowLote] = useState(null);
 
+  // Auth State
+  const [userRole, setUserRole] = useState(null);
+  const [loginType, setLoginType] = useState(null);
+  const [showFinanceLogin, setShowFinanceLogin] = useState(false);
+
+  // Initial Auth Check
   useEffect(() => {
     const storedRole = localStorage.getItem('userRole');
+    const storedType = localStorage.getItem('loginType');
+    
     if (storedRole) {
+      console.log("Restoring session:", storedRole, storedType);
       setUserRole(storedRole);
+      setLoginType(storedType || 'usuario');
     }
   }, []);
 
+  // Data Fetching
   const fetchLotes = useCallback(async () => {
+    // Corrected: Ordering by data_criacao instead of created_at
     const { data, error } = await supabase.from('lotes').select('*').order('data_criacao', { ascending: true });
     if (error) {
+      console.error('Error fetching lotes:', error);
       toast({ title: "❌ Erro ao buscar lotes", description: error.message, variant: "destructive" });
     } else {
-      setLotes(data);
+      setLotes(data || []);
     }
   }, []);
 
   const fetchHistorico = useCallback(async () => {
     const { data, error } = await supabase.from('historico').select('*').order('data_entrega', { ascending: false });
     if (error) {
+      console.error('Error fetching historico:', error);
       toast({ title: "❌ Erro ao buscar histórico", description: error.message, variant: "destructive" });
     } else {
-      setHistorico(data);
+      setHistorico(data || []);
     }
   }, []);
 
+  // Subscriptions & Data Load triggers
   useEffect(() => {
-    if (!userRole) return;
+    if (!userRole || loginType === 'financeiro') return;
+    
     fetchLotes();
     fetchHistorico();
-    const lotesSubscription = supabase.channel('public:lotes').on('postgres_changes', { event: '*', schema: 'public', table: 'lotes' }, fetchLotes).subscribe();
-    const historicoSubscription = supabase.channel('public:historico').on('postgres_changes', { event: '*', schema: 'public', table: 'historico' }, fetchHistorico).subscribe();
+    
+    const lotesSubscription = supabase.channel('public:lotes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lotes' }, fetchLotes)
+      .subscribe();
+      
+    const historicoSubscription = supabase.channel('public:historico')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'historico' }, fetchHistorico)
+      .subscribe();
+      
     return () => {
       supabase.removeChannel(lotesSubscription);
       supabase.removeChannel(historicoSubscription);
     };
-  }, [userRole, fetchLotes, fetchHistorico]);
+  }, [userRole, loginType, fetchLotes, fetchHistorico]);
   
+  // Handlers
   const handleLogin = useCallback((role) => {
+    console.log("App: Login attempt for role:", role);
+    if (role === 'financeiro') {
+      setShowFinanceLogin(true);
+      return;
+    }
     localStorage.setItem('userRole', role);
+    localStorage.setItem('loginType', role === 'administrador' ? 'admin' : 'usuario');
     setUserRole(role);
+    setLoginType(role === 'administrador' ? 'admin' : 'usuario');
+  }, []);
+
+  const handleFinanceLogin = useCallback((type) => {
+    console.log("App: Finance login success callback triggered with type:", type);
+    // Use 'financeiro' consistently
+    const roleType = type || 'financeiro';
+    localStorage.setItem('userRole', roleType);
+    localStorage.setItem('loginType', roleType);
+    setUserRole(roleType);
+    setLoginType(roleType);
+    setShowFinanceLogin(false);
   }, []);
 
   const handleLogout = useCallback(() => {
+    console.log("Logging out");
     localStorage.removeItem('userRole');
+    localStorage.removeItem('loginType');
     setUserRole(null);
+    setLoginType(null);
+    setShowFinanceLogin(false);
   }, []);
 
-  const handleOpenAddModal = useCallback(() => {
-    setEditingLote(null);
-    setIsAddModalOpen(true);
-  }, []);
-
-  const handleOpenEditModal = useCallback((loteToEdit) => {
-    setEditingLote(loteToEdit);
-    setIsAddModalOpen(true);
-  }, []);
+  const handleOpenAddModal = useCallback(() => { setEditingLote(null); setIsAddModalOpen(true); }, []);
+  const handleOpenEditModal = useCallback((loteToEdit) => { setEditingLote(loteToEdit); setIsAddModalOpen(true); }, []);
 
   const handleAddOrUpdateLote = useCallback(async (loteData, id) => {
     const dataToSave = {
@@ -105,12 +154,12 @@ function App() {
         precisa_nota_fiscal: loteData.precisaNotaFiscal,
         updated_at: new Date().toISOString()
     };
-    
     if (id) {
       const { error } = await supabase.from('lotes').update(dataToSave).eq('id', id);
       if (error) { toast({ title: "❌ Erro ao atualizar", description: error.message, variant: "destructive" }); } 
       else { toast({ title: "✅ Lote atualizado!", description: `O lote de ${loteData.cliente} foi modificado.` }); }
     } else {
+       // Corrected: Using data_criacao instead of created_at
        const newLote = { ...dataToSave, pago: 'unanalysed', medida: 'unanalysed', nota_fiscal: 'unanalysed', programado: false, pintado: false, promessa: false, data_criacao: new Date().toISOString() };
       const { error } = await supabase.from('lotes').insert(newLote);
       if (error) { toast({ title: "❌ Erro ao adicionar", description: error.message, variant: "destructive" }); } 
@@ -122,17 +171,12 @@ function App() {
   const handleUpdateLoteStatus = useCallback(async (id, updates) => {
     const loteOriginal = lotes.find(l => l.id === id);
     if (!loteOriginal) return;
-
     let finalUpdates = { ...updates };
+    
     if (finalUpdates.pintado === true) { finalUpdates.data_pintura = new Date().toISOString(); }
     if (finalUpdates.pintado === false && loteOriginal.pintado) { finalUpdates.data_pintura = null; }
-    if (finalUpdates.programado === true) {
-      setLoteToProgram(id);
-      setIsCabineModalOpen(true);
-      return;
-    }
+    if (finalUpdates.programado === true) { setLoteToProgram(id); setIsCabineModalOpen(true); return; }
     if (finalUpdates.programado === false && loteOriginal.programado) { finalUpdates = { ...finalUpdates, promessa: false, programado: false, cabine: null, ordem_pintura: null }; }
-    
     finalUpdates.updated_at = new Date().toISOString();
     const { error } = await supabase.from('lotes').update(finalUpdates).eq('id', id);
     if (error) { toast({ title: "❌ Erro ao atualizar status", description: error.message, variant: "destructive" }); } 
@@ -159,10 +203,7 @@ function App() {
   const handleMarcarEntregue = useCallback(async (id) => {
     const loteToMove = lotes.find(l => l.id === id);
     if (!loteToMove) return;
-    if (!(loteToMove.pago === 'ok' && loteToMove.medida === 'ok' && loteToMove.pintado)) {
-      toast({ title: "⚠️ Ação bloqueada", description: "Status 'Pago', 'Medida' e 'Pintado' devem estar OK.", variant: "destructive" });
-      return;
-    }
+    if (!(loteToMove.pago === 'ok' && loteToMove.medida === 'ok' && loteToMove.pintado)) { toast({ title: "⚠️ Ação bloqueada", description: "Status 'Pago', 'Medida' e 'Pintado' devem estar OK.", variant: "destructive" }); return; }
     const loteEntregue = { ...loteToMove, data_entrega: new Date().toISOString() };
     const { error: insertError } = await supabase.from('historico').insert(loteEntregue);
     if (insertError) { toast({ title: "❌ Erro ao mover", description: insertError.message, variant: "destructive" }); return; }
@@ -174,10 +215,7 @@ function App() {
   const handleDeleteLote = useCallback(async (id) => {
     if (userRole !== 'administrador') { toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir.", variant: "destructive" }); return; }
     const loteToDelete = lotes.find(l => l.id === id);
-    if (loteToDelete?.foto) {
-      const { error: storageError } = await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]);
-      if (storageError) { toast({ title: "⚠️ Erro ao apagar foto", description: storageError.message, variant: "destructive" }); }
-    }
+    if (loteToDelete?.foto) { const { error: storageError } = await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]); if (storageError) console.error(storageError); }
     const { error } = await supabase.from('lotes').delete().eq('id', id);
     if (error) { toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" }); } 
     else { toast({ title: "🗑️ Lote removido", description: "Lote excluído com sucesso." }); }
@@ -186,55 +224,33 @@ function App() {
   const handleDeleteHistoricoLote = useCallback(async (id) => {
     if (userRole !== 'administrador') { toast({ title: "🚫 Acesso Negado", description: "Permissão para excluir do histórico negada.", variant: "destructive" }); return; }
     const loteToDelete = historico.find(l => l.id === id);
-    if (loteToDelete?.foto) {
-      const { error: storageError } = await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]);
-      if (storageError) { toast({ title: "⚠️ Erro ao apagar foto", description: storageError.message, variant: "destructive" }); }
-    }
+    if (loteToDelete?.foto) { const { error: storageError } = await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]); if (storageError) console.error(storageError); }
     const { error } = await supabase.from('historico').delete().eq('id', id);
     if (error) { toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" }); } 
     else { toast({ title: "🗑️ Lote removido do histórico", description: "Lote excluído." }); }
   }, [userRole, historico]);
   
-  const resetAllFilters = useCallback(() => {
-    setSearchTerm('');
-    setStatusFilters({ pago: 'any', medida: 'any', nota_fiscal: 'any' });
-  }, []);
-  
-  const handleFilterChange = useCallback((newFilter) => {
-    setFilterStatus(newFilter);
-    if (newFilter === 'programado') {
-        setCabineFilter('1');
-    }
-    window.scrollTo(0, 0);
+  const handleRegisterFinanceRedirect = useCallback((lote) => {
+    // This function sets the state that triggers the Finance Module view
+    setFinanceFlowLote(lote);
   }, []);
 
-  const handleStatusFilterChange = useCallback((filterName, value) => {
-      setStatusFilters(prev => ({...prev, [filterName]: value}));
-      window.scrollTo(0, 0);
-  }, []);
+  const resetAllFilters = useCallback(() => { setSearchTerm(''); setStatusFilters({ pago: 'any', medida: 'any', nota_fiscal: 'any' }); }, []);
+  const handleFilterChange = useCallback((newFilter) => { setFilterStatus(newFilter); if (newFilter === 'programado') { setCabineFilter('1'); } window.scrollTo(0, 0); }, []);
+  const handleStatusFilterChange = useCallback((filterName, value) => { setStatusFilters(prev => ({...prev, [filterName]: value})); window.scrollTo(0, 0); }, []);
 
   const handleDragEnd = async (result) => {
     const { destination, source } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-
     const cabine = parseInt(source.droppableId.split('-')[1]);
     const lotesNaCabine = filteredLotes.programado.filter(l => l.cabine === cabine);
     const [reorderedItem] = lotesNaCabine.splice(source.index, 1);
     lotesNaCabine.splice(destination.index, 0, reorderedItem);
-
-    const updates = lotesNaCabine.map((lote, index) => ({
-        id: lote.id,
-        ordem_pintura: index
-    }));
-
+    const updates = lotesNaCabine.map((lote, index) => ({ id: lote.id, ordem_pintura: index }));
     const { error } = await supabase.from('lotes').upsert(updates);
-    if (error) {
-        toast({ title: "❌ Erro ao reordenar", description: error.message, variant: "destructive" });
-    } else {
-        toast({ title: "✅ Ordem salva!", description: "A nova ordem de pintura foi registrada." });
-        fetchLotes(); // Re-fetch to confirm order
-    }
+    if (error) { toast({ title: "❌ Erro ao reordenar", description: error.message, variant: "destructive" }); } 
+    else { toast({ title: "✅ Ordem salva!", description: "A nova ordem de pintura foi registrada." }); fetchLotes(); }
   };
 
   const filteredLotes = useMemo(() => {
@@ -246,15 +262,10 @@ function App() {
       if (statusFilters.nota_fiscal !== 'any' && lote.nota_fiscal !== statusFilters.nota_fiscal) return false;
       return true;
     };
-    
     const recebido = lotes.filter(l => !l.programado && !l.pintado && applyFilters(l));
     const programadoRaw = lotes.filter(l => l.programado && !l.pintado && applyFilters(l));
     const pintado = lotes.filter(l => l.pintado && applyFilters(l));
-
-    const programado = cabineFilter === 'all' 
-      ? programadoRaw 
-      : programadoRaw.filter(l => l.cabine === parseInt(cabineFilter));
-
+    const programado = cabineFilter === 'all' ? programadoRaw : programadoRaw.filter(l => l.cabine === parseInt(cabineFilter));
     return { recebido, programado, pintado };
   }, [lotes, searchTerm, statusFilters, cabineFilter]);
 
@@ -270,18 +281,49 @@ function App() {
     { id: 'programado', label: 'Programado p/ Pintura', icon: CalendarCheck, count: stats.programado },
     { id: 'pintado', label: 'Pintados', icon: CheckCircle, count: stats.pintado },
   ];
-  
   const cabineFilterOptions = ['1', '2', '3', '4', 'all'];
 
-  if (!userRole) return <Suspense fallback={<LoadingFallback />}><LoginScreen onLogin={handleLogin} /></Suspense>;
+  // --------------------------------------------------------------------------------
+  // MAIN RENDER LOGIC
+  // --------------------------------------------------------------------------------
 
+  // 1. Financeiro Override OR Finance Flow triggered from Lote
+  if (loginType === 'financeiro' || financeFlowLote) {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <FinanceModule 
+            onLogout={loginType === 'financeiro' ? handleLogout : undefined} 
+            loteData={financeFlowLote}
+            onReturn={financeFlowLote ? () => setFinanceFlowLote(null) : undefined}
+        />
+      </Suspense>
+    );
+  }
+
+  // 2. Unauthenticated State
+  if (!userRole) {
+    if (showFinanceLogin) {
+      return (
+        <Suspense fallback={<LoadingFallback />}>
+          <FinanceLogin onLogin={handleFinanceLogin} onBack={() => setShowFinanceLogin(false)} />
+        </Suspense>
+      );
+    }
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <LoginScreen onLogin={handleLogin} />
+      </Suspense>
+    );
+  }
+
+  // 3. Authenticated as 'usuario' or 'administrador'
   const currentLotes = filteredLotes[filterStatus] || [];
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <Helmet>
         <title>Sistema de Gestão de Lotes - Textura Técnicas</title>
-        <meta name="description" content="Sistema otimizado para gestão de lotes industriais com controle em tempo real." />
+        <meta name="description" content="Sistema otimizado para gestão de lotes industriais." />
       </Helmet>
 
       <div className="min-h-screen p-4 md:p-8">
@@ -361,7 +403,15 @@ function App() {
                             <Draggable key={lote.id} draggableId={lote.id.toString()} index={index} isDragDisabled={filterStatus !== 'programado' || cabineFilter === 'all'}>
                               {(provided) => (
                                 <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                                  <LoteCard lote={lote} userRole={userRole} onUpdateStatus={handleUpdateLoteStatus} onMarcarEntregue={handleMarcarEntregue} onDelete={handleDeleteLote} onEdit={handleOpenEditModal} />
+                                  <LoteCard 
+                                    lote={lote} 
+                                    userRole={userRole} 
+                                    onUpdateStatus={handleUpdateLoteStatus} 
+                                    onMarcarEntregue={handleMarcarEntregue} 
+                                    onDelete={handleDeleteLote} 
+                                    onEdit={handleOpenEditModal} 
+                                    onRegisterFinance={handleRegisterFinanceRedirect}
+                                  />
                                 </div>
                               )}
                             </Draggable>
@@ -381,6 +431,7 @@ function App() {
           <HistoricoModal isOpen={isHistoricoOpen} onClose={() => setIsHistoricoOpen(false)} historico={historico} onDelete={handleDeleteHistoricoLote} userRole={userRole} />
           <QRScannerModal isOpen={isQRScannerOpen} onClose={() => setIsQRScannerOpen(false)} onScan={handleMarcarPintadoPorQR} lotes={lotes} />
           <CabineSelectModal isOpen={isCabineModalOpen} onClose={() => setIsCabineModalOpen(false)} onSelectCabine={(cabine) => handleSetCabine(loteToProgram, cabine)} />
+          {/* PIXRegistrationModal is now managed inside FinanceModule when redirecting */}
         </Suspense>
         
         <Toaster />

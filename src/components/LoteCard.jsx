@@ -1,12 +1,15 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2 } from 'lucide-react';
+import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
+import WhatsAppMessageModal from '@/components/WhatsAppMessageModal';
+import ScheduleModal from '@/components/ScheduleModal';
+import FinanceConfirmationToast from '@/components/FinanceConfirmationToast';
 import { supabase } from '@/lib/customSupabaseClient';
 
-const StatusButton = React.memo(({ Icon, label, status, onClick, isDisabled = false }) => {
+const StatusButton = React.memo(({ Icon, label, status, onClick, isDisabled = false, isLoading = false }) => {
   const colorMap = {
     ok: { bg: 'bg-green-500', text: 'text-green-50', ring: 'ring-green-500' },
     pending: { bg: 'bg-red-500', text: 'text-red-50', ring: 'ring-red-500' },
@@ -19,15 +22,20 @@ const StatusButton = React.memo(({ Icon, label, status, onClick, isDisabled = fa
     <motion.button
       whileHover={isDisabled ? {} : { scale: 1.05, y: -2 }}
       whileTap={isDisabled ? {} : { scale: 0.95 }}
-      onClick={isDisabled ? undefined : onClick}
+      onClick={isDisabled || isLoading ? undefined : onClick}
       className={`p-2 rounded-lg flex flex-col items-center justify-center gap-1.5 transition-all w-full text-center relative overflow-hidden ring-2 ${activeClasses.bg} ${activeClasses.ring} ${isDisabled ? 'cursor-not-allowed opacity-70' : 'hover:scale-105 hover:-translate-y-0.5'}`}
     >
       {isDisabled && <Lock className="absolute top-1 right-1 w-2.5 h-2.5 text-slate-400" />}
-      <Icon className={`w-4 h-4 transition-colors ${activeClasses.text}`} />
+      {isLoading ? (
+        <Loader2 className={`w-4 h-4 animate-spin ${activeClasses.text}`} />
+      ) : (
+        <Icon className={`w-4 h-4 transition-colors ${activeClasses.text}`} />
+      )}
       <span className={`text-[10px] font-bold transition-colors ${activeClasses.text}`}>{label}</span>
     </motion.button>
   );
 });
+StatusButton.displayName = 'StatusButton';
 
 const SimpleStatusButton = React.memo(({ Icon, label, isActive, onClick, colorClass }) => {
     const colorMap = {
@@ -44,12 +52,18 @@ const SimpleStatusButton = React.memo(({ Icon, label, isActive, onClick, colorCl
         </motion.button>
     );
 });
+SimpleStatusButton.displayName = 'SimpleStatusButton';
 
-const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit }) => {
+const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit, onRegisterFinance }) => {
   const [showQR, setShowQR] = useState(false);
   const [showImage, setShowImage] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [imageUrl, setImageUrl] = useState(null);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
+  
+  // Finance Toast State
+  const [showFinanceToast, setShowFinanceToast] = useState(false);
 
   const handleShowImage = async () => {
     if (!lote.foto) { toast({ title: "ℹ️ Sem imagem", description: "Nenhuma imagem foi cadastrada para este lote." }); return; }
@@ -71,8 +85,76 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
       toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para alterar este status.", variant: "destructive" });
       return;
     }
+
+    if (field === 'pago') {
+      // 3-state cycle: unanalysed (Grey) -> pending (Red) -> ok (Green) -> unanalysed (Grey)
+      const cycle = {
+        'unanalysed': 'pending', // First click: Set to Red (Não pago)
+        'pending': 'ok',         // Second click: Set to Green (Pago)
+        'ok': 'unanalysed'       // Third click: Return to Original/Default (Unanalysed)
+      };
+
+      const safeCurrentStatus = ['ok', 'pending', 'unanalysed'].includes(currentStatus) ? currentStatus : 'unanalysed';
+      const nextStatus = cycle[safeCurrentStatus];
+
+      // Optimistically update status
+      onUpdateStatus(lote.id, { pago: nextStatus });
+
+      // If transitioning to 'ok' (Green), show confirmation toast
+      if (nextStatus === 'ok') {
+        setShowFinanceToast(true);
+      } else {
+        // If moving away from 'ok' or to 'pending', ensure toast is closed
+        setShowFinanceToast(false);
+      }
+      return;
+    }
+
+    // Standard toggle for other fields
     const nextStatus = { 'unanalysed': 'pending', 'pending': 'ok', 'ok': 'unanalysed' };
     onUpdateStatus(lote.id, { [field]: nextStatus[currentStatus] });
+  };
+
+  const handleFinanceConfirm = () => {
+    // User clicked "Sim" - Redirect to Finance Module Flow
+    setShowFinanceToast(false);
+    
+    // Call the callback to trigger redirection in App.jsx
+    if (onRegisterFinance) {
+        onRegisterFinance(lote);
+    } else {
+        console.error("onRegisterFinance callback not provided to LoteCard");
+        toast({ title: "Erro", description: "Funcionalidade de redirecionamento não disponível.", variant: "destructive" });
+    }
+  };
+
+  const handleFinanceCancel = () => {
+    // User clicked "Não" - Revert status back to 'pending' (Red)
+    onUpdateStatus(lote.id, { pago: 'pending' });
+    setShowFinanceToast(false);
+    toast({
+      description: "Pagamento não confirmado. Status revertido.",
+    });
+  };
+
+  const handleFinanceDismiss = () => {
+    // Timeout or User clicked X
+    // We keep status as Paid (Green) because user manually set it, but didn't want to register record now.
+    setShowFinanceToast(false);
+  };
+
+  const handleWhatsAppClick = () => {
+    const defaultMessage = localStorage.getItem('whatsapp_message_default') || 'Olá! Suas peças estão prontas para retirada. PIX: 95443354000117';
+    const encodedMessage = encodeURIComponent(defaultMessage);
+    window.open(`https://web.whatsapp.com/send?text=${encodedMessage}`, '_blank');
+  };
+
+  const handleScheduleClick = () => {
+    if (lote.programado) {
+      setShowScheduleModal(true);
+    } else {
+      onUpdateStatus(lote.id, { programado: true });
+    }
   };
 
   const getStatusText = () => {
@@ -101,6 +183,13 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
 
   return (
     <>
+      <FinanceConfirmationToast 
+        isVisible={showFinanceToast}
+        onConfirm={handleFinanceConfirm}
+        onCancel={handleFinanceCancel}
+        onDismiss={handleFinanceDismiss}
+      />
+      
       <motion.div
         layout
         initial={{ opacity: 0, y: 20 }}
@@ -113,7 +202,13 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
         <div className="p-4 flex flex-col flex-grow gap-3">
           <div className="flex items-start gap-2">
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
-                <StatusButton Icon={DollarSign} label="Pago" status={lote.pago} onClick={() => handleToggleStatus('pago', lote.pago)} isDisabled={!isAdmin} />
+                <StatusButton 
+                  Icon={DollarSign} 
+                  label="Pago" 
+                  status={lote.pago} 
+                  onClick={() => handleToggleStatus('pago', lote.pago)} 
+                  isDisabled={!isAdmin} 
+                />
                 <StatusButton Icon={Ruler} label="Medida" status={lote.medida} onClick={() => handleToggleStatus('medida', lote.medida)} isDisabled={!isAdmin} />
                 {lote.precisa_nota_fiscal && <StatusButton Icon={FileText} label="NF" status={lote.nota_fiscal} onClick={() => handleToggleStatus('nota_fiscal', lote.nota_fiscal)} isDisabled={!isAdmin} />}
               </div>
@@ -129,7 +224,7 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
                   <p className="text-sm text-slate-300 text-shadow truncate w-full mb-2">{lote.cor} • {lote.quantidade ? `${lote.quantidade} peças` : 'N/A'}</p>
               </div>
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
-                <SimpleStatusButton Icon={CalendarCheck} label="Progr." isActive={lote.programado} onClick={() => onUpdateStatus(lote.id, { programado: !lote.programado })} colorClass="programado" />
+                <SimpleStatusButton Icon={CalendarCheck} label="Progr." isActive={lote.programado} onClick={handleScheduleClick} colorClass="programado" />
                 <SimpleStatusButton Icon={CheckCircle} label="Pintado" isActive={lote.pintado} onClick={() => onUpdateStatus(lote.id, { pintado: !lote.pintado })} colorClass="pintado" />
                 <motion.button whileHover={{scale: 1.05, y: -2}} whileTap={{scale: 0.95}} onClick={() => onUpdateStatus(lote.id, { promessa: !lote.promessa })} className={`p-2 rounded-lg flex flex-col items-center justify-center gap-1.5 w-full ring-2 ${lote.promessa ? 'bg-yellow-400 ring-yellow-400' : 'bg-slate-700/50 ring-transparent'}`}>
                     <Star className={`w-4 h-4 transition-colors ${lote.promessa ? 'text-yellow-900' : 'text-slate-400'}`}/>
@@ -139,6 +234,7 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
           </div>
           
           <div className="grid grid-cols-3 gap-2 text-xs text-slate-400 text-center -mt-1">
+            {/* Corrected: Using data_criacao instead of created_at */}
             <div className="glass-effect px-2 py-1 rounded-md inline-flex items-center justify-center gap-1.5"><CalendarIcon className="w-3 h-3 text-sky-300" /><span>{formatDate(lote.data_criacao)}</span></div>
             {lote.data_pintura ? 
                 <div className="glass-effect px-2 py-1 rounded-md inline-flex items-center justify-center gap-1.5"><CheckCircle className="w-3 h-3 text-green-400" /><span>{formatDate(lote.data_pintura)}</span></div> : <div />
@@ -159,12 +255,29 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
           <div className="flex gap-2">
              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setShowQR(true)} className="p-2.5 glass-effect hover:bg-slate-700/60 rounded-xl" aria-label="Gerar QR Code"><QrCode className="w-4 h-4 text-sky-300" /></motion.button>
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => onEdit(lote)} className="p-2.5 glass-effect hover:bg-slate-700/60 rounded-xl" aria-label="Editar Lote"><Edit className="w-4 h-4 text-sky-300" /></motion.button>
+            
+            {lote.pintado && (
+              <motion.button 
+                whileHover={{ scale: 1.05 }} 
+                whileTap={{ scale: 0.95 }} 
+                onClick={handleWhatsAppClick}
+                onContextMenu={(e) => { e.preventDefault(); setShowWhatsAppModal(true); }}
+                className="p-2.5 glass-effect hover:bg-green-500/20 rounded-xl group/whats" 
+                aria-label="Enviar WhatsApp"
+                title="Clique direito para editar mensagem"
+              >
+                <MessageCircle className="w-4 h-4 text-green-400 group-hover/whats:scale-110 transition-transform" />
+              </motion.button>
+            )}
+            
             <motion.button whileHover={{ scale: isReadyForDelivery ? 1.02 : 1 }} whileTap={{ scale: isReadyForDelivery ? 0.98 : 1 }} onClick={() => onMarcarEntregue(lote.id)} className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${isReadyForDelivery ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg shadow-green-500/30' : 'bg-slate-600/50 text-slate-400 cursor-not-allowed'}`}><Truck className="w-4 h-4" />Entregar</motion.button>
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { if (window.confirm('Tem certeza?')) { onDelete(lote.id); } }} className={`p-2.5 glass-effect rounded-xl text-slate-400 ${isAdmin ? 'hover:bg-red-500/20 hover:text-red-400' : 'opacity-50 cursor-not-allowed'}`} aria-label="Excluir Lote" disabled={!isAdmin}><Trash2 className="w-4 h-4" /></motion.button>
           </div>
         </div>
       </motion.div>
       {showQR && <QRCodeGenerator loteId={lote.id} cliente={lote.cliente} onClose={() => setShowQR(false)} />}
+      {showWhatsAppModal && <WhatsAppMessageModal isOpen={showWhatsAppModal} onClose={() => setShowWhatsAppModal(false)} onSave={() => {}} />}
+      {showScheduleModal && <ScheduleModal isOpen={showScheduleModal} onClose={() => setShowScheduleModal(false)} loteId={lote.id} currentCabine={lote.cabine} />}
       {showImage && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowImage(false)} className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} onClick={(e) => e.stopPropagation()} className="relative max-w-4xl w-full flex items-center justify-center">
@@ -179,3 +292,4 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
 };
 
 export default React.memo(LoteCard);
+LoteCard.displayName = 'LoteCard';
