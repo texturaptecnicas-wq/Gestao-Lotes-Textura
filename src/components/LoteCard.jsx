@@ -173,8 +173,20 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
   
   const isReadyForDelivery = lote.pago === 'ok' && lote.medida === 'ok' && lote.pintado;
   
-  const formatDate = (dateString) => {
+  const formatDate = (dateString, isDateOnly = false) => {
     if (!dateString) return null;
+    
+    if (isDateOnly && typeof dateString === 'string') {
+      // For date-only fields like prazo_entrega (DATE in Supabase), 
+      // extract YYYY-MM-DD directly to avoid timezone offset shifts when calling new Date()
+      const datePart = dateString.split('T')[0];
+      const [year, month, day] = datePart.split('-');
+      if (year && month && day) {
+        return `${day}/${month}/${year}`;
+      }
+    }
+    
+    // For timestamps (data_criacao, data_pintura), standard local parsing is correct
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   };
@@ -234,13 +246,12 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
           </div>
           
           <div className="grid grid-cols-3 gap-2 text-xs text-slate-400 text-center -mt-1">
-            {/* Corrected: Using data_criacao instead of created_at */}
             <div className="glass-effect px-2 py-1 rounded-md inline-flex items-center justify-center gap-1.5"><CalendarIcon className="w-3 h-3 text-sky-300" /><span>{formatDate(lote.data_criacao)}</span></div>
             {lote.data_pintura ? 
                 <div className="glass-effect px-2 py-1 rounded-md inline-flex items-center justify-center gap-1.5"><CheckCircle className="w-3 h-3 text-green-400" /><span>{formatDate(lote.data_pintura)}</span></div> : <div />
             }
             {lote.prazo_entrega ?
-                <div className="glass-effect px-2 py-1 rounded-md inline-flex items-center justify-center gap-1.5 bg-red-500/20 text-red-300 font-semibold"><Truck className="w-3 h-3" /><span>{formatDate(lote.prazo_entrega)}</span></div> : <div />
+                <div className="glass-effect px-2 py-1 rounded-md inline-flex items-center justify-center gap-1.5 bg-red-500/20 text-red-300 font-semibold"><Truck className="w-3 h-3" /><span>{formatDate(lote.prazo_entrega, true)}</span></div> : <div />
             }
           </div>
 

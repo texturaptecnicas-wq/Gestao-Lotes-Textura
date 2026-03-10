@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Upload, Calendar, CreditCard, MessageSquare, Loader2, Lock, FileText } from 'lucide-react';

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host :: --port 3000",
     "build": "node tools/generate-llms.js || true && vite build",
-    "preview": "vite preview --host :: --port 3000"
+    "preview": "vite preview --host :: --port 3000",
+    "lint": "eslint . --quiet"
   },
   "dependencies": {
     "@babel/generator": "^7.26.3",
@@ -31,7 +32,9 @@
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.2.0",
     "react-helmet": "^6.1.0",
+    "react-router-dom": "^7.13.1",
     "react-window": "^1.8.10",
+    "recharts": "^2.12.7",
     "tailwind-merge": "^1.1.4",
     "tailwindcss-animate": "^1.0.7"
   },
