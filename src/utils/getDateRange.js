@@ -1,4 +1,3 @@
-
 export const getNextDay = (dateString) => {
   if (!dateString) return null;
   // Parse date as local time to avoid timezone shifts

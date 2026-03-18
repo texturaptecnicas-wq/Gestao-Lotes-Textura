@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, Building, ArrowRight, Loader2 } from 'lucide-react';
@@ -15,8 +16,11 @@ const ScheduleModal = ({ isOpen, onClose, loteId, currentCabine }) => {
   useEffect(() => {
     if (isOpen) {
       fetchAvailableCabines();
+      // Reset state when opened
+      setSelectedCabine(currentCabine || 1);
+      setShowCabineChange(false);
     }
-  }, [isOpen]);
+  }, [isOpen, currentCabine]);
 
   const fetchAvailableCabines = async () => {
     const { data, error } = await supabase
@@ -63,13 +67,41 @@ const ScheduleModal = ({ isOpen, onClose, loteId, currentCabine }) => {
   };
 
   const handleChangeCabine = async () => {
-    if (!ordemPintura || ordemPintura < 0) {
-      toast({
-        title: "⚠️ Ordem inválida",
-        description: "Informe uma ordem de pintura válida.",
-        variant: "destructive"
-      });
-      return;
+    let finalOrder = parseInt(ordemPintura);
+
+    if (loteId) {
+      setIsChanging(true);
+      // Auto-calculate the next available position (max ordem_pintura + 1) for the selected cabine
+      const { data: maxOrderData, error: maxError } = await supabase
+        .from('lotes')
+        .select('ordem_pintura')
+        .eq('cabine', selectedCabine)
+        .order('ordem_pintura', { ascending: false })
+        .limit(1);
+
+      if (maxError) {
+        toast({
+          title: "❌ Erro ao buscar ordem",
+          description: maxError.message,
+          variant: "destructive"
+        });
+        setIsChanging(false);
+        return;
+      }
+
+      finalOrder = (maxOrderData && maxOrderData.length > 0 && maxOrderData[0].ordem_pintura !== null)
+        ? maxOrderData[0].ordem_pintura + 1
+        : 0;
+    } else {
+      // Only require manual input if no loteId is provided (create mode)
+      if (!ordemPintura || finalOrder < 0) {
+        toast({
+          title: "⚠️ Ordem inválida",
+          description: "Informe uma ordem de pintura válida.",
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
     setIsChanging(true);
@@ -77,7 +109,7 @@ const ScheduleModal = ({ isOpen, onClose, loteId, currentCabine }) => {
       .from('lotes')
       .update({ 
         cabine: parseInt(selectedCabine),
-        ordem_pintura: parseInt(ordemPintura),
+        ordem_pintura: finalOrder,
         updated_at: new Date().toISOString()
       })
       .eq('id', loteId);
@@ -93,7 +125,7 @@ const ScheduleModal = ({ isOpen, onClose, loteId, currentCabine }) => {
     } else {
       toast({
         title: "✅ Cabine atualizada!",
-        description: `Lote movido para Cabine ${selectedCabine} na posição ${ordemPintura}.`
+        description: `Lote movido para Cabine ${selectedCabine} na posição automática (${finalOrder}).`
       });
       onClose();
     }
@@ -162,7 +194,7 @@ const ScheduleModal = ({ isOpen, onClose, loteId, currentCabine }) => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold mb-2 text-slate-300">
-                  Selecione a Cabine
+                  Selecione a Nova Cabine
                 </label>
                 <select
                   value={selectedCabine}
@@ -175,19 +207,27 @@ const ScheduleModal = ({ isOpen, onClose, loteId, currentCabine }) => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-slate-300">
-                  Ordem de Pintura
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={ordemPintura}
-                  onChange={(e) => setOrdemPintura(e.target.value)}
-                  placeholder="Ex: 1, 2, 3..."
-                  className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 text-white"
-                />
-              </div>
+              {!loteId && (
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-slate-300">
+                    Ordem de Pintura
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={ordemPintura}
+                    onChange={(e) => setOrdemPintura(e.target.value)}
+                    placeholder="Ex: 1, 2, 3..."
+                    className="w-full glass-effect px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 text-white"
+                  />
+                </div>
+              )}
+
+              {loteId && (
+                <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 text-sm text-sky-300">
+                  A posição na fila de pintura será definida automaticamente no final da cabine selecionada.
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <motion.button

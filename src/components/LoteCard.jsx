@@ -1,13 +1,14 @@
 
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
 import WhatsAppMessageModal from '@/components/WhatsAppMessageModal';
 import ScheduleModal from '@/components/ScheduleModal';
 import FinanceConfirmationToast from '@/components/FinanceConfirmationToast';
 import { supabase } from '@/lib/customSupabaseClient';
+import { useQualityAlerts } from '@/hooks/useQualityAlerts';
 
 const StatusButton = React.memo(({ Icon, label, status, onClick, isDisabled = false, isLoading = false }) => {
   const colorMap = {
@@ -65,6 +66,10 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
   // Finance Toast State
   const [showFinanceToast, setShowFinanceToast] = useState(false);
 
+  // Quality Alerts Hook using client name
+  const { alerts, loading: loadingAlerts } = useQualityAlerts(lote.cliente);
+  const [expandAlerts, setExpandAlerts] = useState(false);
+
   const handleShowImage = async () => {
     if (!lote.foto) { toast({ title: "ℹ️ Sem imagem", description: "Nenhuma imagem foi cadastrada para este lote." }); return; }
     setIsLoadingImage(true);
@@ -87,49 +92,39 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
     }
 
     if (field === 'pago') {
-      // 3-state cycle: unanalysed (Grey) -> pending (Red) -> ok (Green) -> unanalysed (Grey)
       const cycle = {
-        'unanalysed': 'pending', // First click: Set to Red (Não pago)
-        'pending': 'ok',         // Second click: Set to Green (Pago)
-        'ok': 'unanalysed'       // Third click: Return to Original/Default (Unanalysed)
+        'unanalysed': 'pending', 
+        'pending': 'ok',         
+        'ok': 'unanalysed'       
       };
 
       const safeCurrentStatus = ['ok', 'pending', 'unanalysed'].includes(currentStatus) ? currentStatus : 'unanalysed';
       const nextStatus = cycle[safeCurrentStatus];
 
-      // Optimistically update status
       onUpdateStatus(lote.id, { pago: nextStatus });
 
-      // If transitioning to 'ok' (Green), show confirmation toast
       if (nextStatus === 'ok') {
         setShowFinanceToast(true);
       } else {
-        // If moving away from 'ok' or to 'pending', ensure toast is closed
         setShowFinanceToast(false);
       }
       return;
     }
 
-    // Standard toggle for other fields
     const nextStatus = { 'unanalysed': 'pending', 'pending': 'ok', 'ok': 'unanalysed' };
     onUpdateStatus(lote.id, { [field]: nextStatus[currentStatus] });
   };
 
   const handleFinanceConfirm = () => {
-    // User clicked "Sim" - Redirect to Finance Module Flow
     setShowFinanceToast(false);
-    
-    // Call the callback to trigger redirection in App.jsx
     if (onRegisterFinance) {
         onRegisterFinance(lote);
     } else {
-        console.error("onRegisterFinance callback not provided to LoteCard");
         toast({ title: "Erro", description: "Funcionalidade de redirecionamento não disponível.", variant: "destructive" });
     }
   };
 
   const handleFinanceCancel = () => {
-    // User clicked "Não" - Revert status back to 'pending' (Red)
     onUpdateStatus(lote.id, { pago: 'pending' });
     setShowFinanceToast(false);
     toast({
@@ -138,8 +133,6 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
   };
 
   const handleFinanceDismiss = () => {
-    // Timeout or User clicked X
-    // We keep status as Paid (Green) because user manually set it, but didn't want to register record now.
     setShowFinanceToast(false);
   };
 
@@ -175,18 +168,13 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
   
   const formatDate = (dateString, isDateOnly = false) => {
     if (!dateString) return null;
-    
     if (isDateOnly && typeof dateString === 'string') {
-      // For date-only fields like prazo_entrega (DATE in Supabase), 
-      // extract YYYY-MM-DD directly to avoid timezone offset shifts when calling new Date()
       const datePart = dateString.split('T')[0];
       const [year, month, day] = datePart.split('-');
       if (year && month && day) {
         return `${day}/${month}/${year}`;
       }
     }
-    
-    // For timestamps (data_criacao, data_pintura), standard local parsing is correct
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   };
@@ -211,7 +199,42 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
         className={`glass-effect rounded-2xl overflow-hidden group flex flex-col h-full relative ${lote.promessa ? 'ring-2 ring-yellow-400 shadow-yellow-400/30 shadow-lg' : ''}`}
       >
         {lote.promessa && <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 rounded-full p-1.5 z-10 shadow-lg"><Star className="w-4 h-4" fill="currentColor" /></div>}
+        
         <div className="p-4 flex flex-col flex-grow gap-3">
+          {/* Prominent Quality Alert Banner */}
+          {!loadingAlerts && alerts && alerts.length > 0 && (
+             <div className="w-full">
+               <div 
+                 className="quality-alert-banner"
+                 onClick={() => setExpandAlerts(!expandAlerts)}
+               >
+                 <div className="flex items-center gap-1.5">
+                   <AlertTriangle className="w-4 h-4 fill-red-800 text-white" />
+                   <span>{alerts.length} ALERTA(S) DE QUALIDADE</span>
+                 </div>
+                 {expandAlerts ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+               </div>
+               
+               <AnimatePresence>
+                 {expandAlerts && (
+                   <motion.div 
+                     initial={{ opacity: 0, height: 0 }}
+                     animate={{ opacity: 1, height: 'auto' }}
+                     exit={{ opacity: 0, height: 0 }}
+                     className="bg-red-950/40 border border-red-500/30 rounded-lg p-2 mb-3 space-y-2 overflow-hidden"
+                   >
+                     {alerts.map((a, i) => (
+                       <div key={a.id || i} className="text-xs text-red-200 border-b border-red-500/20 pb-2 last:border-0 last:pb-0">
+                         <strong className="block text-red-400 mb-0.5">Criado em {new Date(a.created_at).toLocaleDateString()}</strong>
+                         <span className="line-clamp-3">{a.description}</span>
+                       </div>
+                     ))}
+                   </motion.div>
+                 )}
+               </AnimatePresence>
+             </div>
+          )}
+
           <div className="flex items-start gap-2">
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
                 <StatusButton 
@@ -232,7 +255,16 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
                      </div>
                   </div>
                   <div className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold text-white ${getStatusColor()} mb-2 shadow-md`}>{getStatusText()}</div>
-                  <h3 className="text-lg font-bold text-shadow-lg text-slate-100 truncate w-full">{lote.cliente}</h3>
+                  
+                  <div className="relative w-full">
+                     <h3 className="text-lg font-bold text-shadow-lg text-slate-100 truncate w-full flex items-center justify-center gap-1">
+                        {lote.cliente}
+                        {!loadingAlerts && alerts && alerts.length > 0 && (
+                          <AlertTriangle className="w-4 h-4 text-red-500 fill-red-500/20" title="Cliente com Alerta" />
+                        )}
+                     </h3>
+                  </div>
+
                   <p className="text-sm text-slate-300 text-shadow truncate w-full mb-2">{lote.cor} • {lote.quantidade ? `${lote.quantidade} peças` : 'N/A'}</p>
               </div>
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
@@ -288,7 +320,9 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
       </motion.div>
       {showQR && <QRCodeGenerator loteId={lote.id} cliente={lote.cliente} onClose={() => setShowQR(false)} />}
       {showWhatsAppModal && <WhatsAppMessageModal isOpen={showWhatsAppModal} onClose={() => setShowWhatsAppModal(false)} onSave={() => {}} />}
+      
       {showScheduleModal && <ScheduleModal isOpen={showScheduleModal} onClose={() => setShowScheduleModal(false)} loteId={lote.id} currentCabine={lote.cabine} />}
+      
       {showImage && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowImage(false)} className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
           <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} onClick={(e) => e.stopPropagation()} className="relative max-w-4xl w-full flex items-center justify-center">

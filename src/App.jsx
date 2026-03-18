@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, Info, LogOut, DollarSign, Ruler, FileText, FilterX } from 'lucide-react';
+import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, Info, LogOut, DollarSign, Ruler, FileText, FilterX, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Toaster } from '@/components/ui/toaster';
 import { toast } from '@/components/ui/use-toast';
@@ -16,8 +17,8 @@ const LoginScreen = React.lazy(() => import('@/components/LoginScreen'));
 const FinanceLogin = React.lazy(() => import('@/components/FinanceLogin'));
 const FinanceModule = React.lazy(() => import('@/components/FinanceModule'));
 const CabineSelectModal = React.lazy(() => import('@/components/CabineSelectModal'));
-// Keeping PIXRegistrationModal import but ensuring it's not auto-triggered
 const PIXRegistrationModal = React.lazy(() => import('@/components/PIXRegistrationModal'));
+const QualityModal = React.lazy(() => import('@/components/QualityModal'));
 
 const LoadingFallback = () => (
   <div className="fixed inset-0 bg-slate-900 backdrop-blur-sm flex items-center justify-center z-[100]">
@@ -35,6 +36,7 @@ function App() {
   const [isHistoricoOpen, setIsHistoricoOpen] = useState(false);
   const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
   const [isCabineModalOpen, setIsCabineModalOpen] = useState(false);
+  const [isQualityModalOpen, setIsQualityModalOpen] = useState(false);
   const [loteToProgram, setLoteToProgram] = useState(null);
   const [editingLote, setEditingLote] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,7 +66,6 @@ function App() {
 
   // Data Fetching
   const fetchLotes = useCallback(async () => {
-    // Corrected: Ordering by data_criacao instead of created_at
     const { data, error } = await supabase.from('lotes').select('*').order('data_criacao', { ascending: true });
     if (error) {
       console.error('Error fetching lotes:', error);
@@ -120,7 +121,6 @@ function App() {
 
   const handleFinanceLogin = useCallback((type) => {
     console.log("App: Finance login success callback triggered with type:", type);
-    // Use 'financeiro' consistently
     const roleType = type || 'financeiro';
     localStorage.setItem('userRole', roleType);
     localStorage.setItem('loginType', roleType);
@@ -158,7 +158,6 @@ function App() {
       if (error) { toast({ title: "❌ Erro ao atualizar", description: error.message, variant: "destructive" }); } 
       else { toast({ title: "✅ Lote atualizado!", description: `O lote de ${loteData.cliente} foi modificado.` }); }
     } else {
-       // Corrected: Using data_criacao instead of created_at
        const newLote = { ...dataToSave, pago: 'unanalysed', medida: 'unanalysed', nota_fiscal: 'unanalysed', programado: false, pintado: false, promessa: false, data_criacao: new Date().toISOString() };
       const { error } = await supabase.from('lotes').insert(newLote);
       if (error) { toast({ title: "❌ Erro ao adicionar", description: error.message, variant: "destructive" }); } 
@@ -230,7 +229,6 @@ function App() {
   }, [userRole, historico]);
   
   const handleRegisterFinanceRedirect = useCallback((lote) => {
-    // This function sets the state that triggers the Finance Module view
     setFinanceFlowLote(lote);
   }, []);
 
@@ -282,11 +280,6 @@ function App() {
   ];
   const cabineFilterOptions = ['1', '2', '3', '4', 'all'];
 
-  // --------------------------------------------------------------------------------
-  // MAIN RENDER LOGIC
-  // --------------------------------------------------------------------------------
-
-  // 1. Financeiro Override OR Finance Flow triggered from Lote
   if (loginType === 'financeiro' || financeFlowLote) {
     return (
       <Suspense fallback={<LoadingFallback />}>
@@ -299,7 +292,6 @@ function App() {
     );
   }
 
-  // 2. Unauthenticated State
   if (!userRole) {
     if (showFinanceLogin) {
       return (
@@ -315,7 +307,6 @@ function App() {
     );
   }
 
-  // 3. Authenticated as 'usuario' or 'administrador'
   const currentLotes = filteredLotes[filterStatus] || [];
 
   return (
@@ -333,6 +324,7 @@ function App() {
               <div className="flex items-center gap-3">
                 <span className="hidden sm:inline text-sm font-semibold glass-effect px-3 py-2 rounded-lg">{userRole === 'administrador' ? '👑 Admin' : '👤 Usuário'}</span>
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleLogout} className="glass-effect p-3 rounded-xl hover:bg-red-500/20" aria-label="Sair"><LogOut className="w-5 h-5 text-red-400" /></motion.button>
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsQualityModalOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60 text-amber-400 border border-amber-500/30"><ShieldAlert className="w-5 h-5" /><span className="hidden sm:inline">Qualidade</span></motion.button>
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsQRScannerOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60"><QrCode className="w-5 h-5 text-sky-300" /><span className="hidden sm:inline">Escanear</span></motion.button>
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsHistoricoOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60"><Truck className="w-5 h-5 text-sky-300" /><span className="hidden sm:inline">Entregues</span></motion.button>
                 <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleOpenAddModal} className="bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:from-sky-600 hover:to-indigo-600 shadow-lg shadow-sky-500/30"><Plus className="w-5 h-5" /><span className="hidden sm:inline">Novo Lote</span></motion.button>
@@ -430,7 +422,7 @@ function App() {
           <HistoricoModal isOpen={isHistoricoOpen} onClose={() => setIsHistoricoOpen(false)} historico={historico} onDelete={handleDeleteHistoricoLote} userRole={userRole} />
           <QRScannerModal isOpen={isQRScannerOpen} onClose={() => setIsQRScannerOpen(false)} onScan={handleMarcarPintadoPorQR} lotes={lotes} />
           <CabineSelectModal isOpen={isCabineModalOpen} onClose={() => setIsCabineModalOpen(false)} onSelectCabine={(cabine) => handleSetCabine(loteToProgram, cabine)} />
-          {/* PIXRegistrationModal is now managed inside FinanceModule when redirecting */}
+          <QualityModal isOpen={isQualityModalOpen} onClose={() => setIsQualityModalOpen(false)} userRole={userRole} />
         </Suspense>
         
         <Toaster />
