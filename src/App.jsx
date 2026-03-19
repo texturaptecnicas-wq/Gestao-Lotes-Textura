@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -389,7 +388,7 @@ function App() {
                 ) : (
                   <Droppable droppableId={`cabine-${cabineFilter}`} isDropDisabled={filterStatus !== 'programado' || cabineFilter === 'all'}>
                     {(provided) => (
-                      <div ref={provided.innerRef} {...provided.droppableProps} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                      <div ref={provided.innerRef} {...provided.droppableProps} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-start">
                           {currentLotes.sort((a,b) => (a.ordem_pintura ?? 999) - (b.ordem_pintura ?? 999)).map((lote, index) => (
                             <Draggable key={lote.id} draggableId={lote.id.toString()} index={index} isDragDisabled={filterStatus !== 'programado' || cabineFilter === 'all'}>
                               {(provided) => (

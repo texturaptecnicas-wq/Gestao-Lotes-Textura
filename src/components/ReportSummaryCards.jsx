@@ -1,66 +1,111 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { DollarSign, TrendingUp, TrendingDown, Hash, Target } from 'lucide-react';
+import { AlertTriangle, Target, Activity, Edit3 } from 'lucide-react';
+import { calculateTrendency } from '@/utils/calculateTrendency';
+import { calculateReworkPercentage } from '@/utils/calculateReworkPercentage';
 
-const ReportSummaryCards = ({ transactions }) => {
-  const stats = useMemo(() => {
-    if (!transactions || transactions.length === 0) {
-      return {
-        total: 0,
-        count: 0,
-        avg: 0,
-        max: 0,
-        min: 0
-      };
-    }
-
-    const values = transactions.map(t => Number(t.valor) || 0);
-    const total = values.reduce((acc, val) => acc + val, 0);
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-
-    return {
-      total,
-      count: transactions.length,
-      avg: total / transactions.length,
-      max,
-      min
-    };
-  }, [transactions]);
-
-  const formatCurrency = (val) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-  const cards = [
-    { label: 'Total do Período', value: formatCurrency(stats.total), icon: DollarSign, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    { label: 'Transações', value: stats.count, icon: Hash, color: 'text-sky-400', bg: 'bg-sky-500/10' },
-    { label: 'Valor Médio', value: formatCurrency(stats.avg), icon: Target, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
-    { label: 'Maior Transação', value: formatCurrency(stats.max), icon: TrendingUp, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-    { label: 'Menor Transação', value: formatCurrency(stats.min), icon: TrendingDown, color: 'text-rose-400', bg: 'bg-rose-500/10' },
-  ];
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-      {cards.map((card, idx) => (
-        <motion.div
-          key={idx}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: idx * 0.1 }}
-          className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-center relative overflow-hidden"
-        >
-          <div className="flex justify-between items-start mb-2">
-             <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider">{card.label}</p>
-             <div className={`p-1.5 rounded-lg ${card.bg}`}>
-                <card.icon className={`w-4 h-4 ${card.color}`} />
-             </div>
-          </div>
-          <h4 className={`text-xl font-bold ${card.color} truncate`}>
-            {card.value}
-          </h4>
-        </motion.div>
-      ))}
-    </div>
-  );
+// Using standard weights for quality sizes
+const PIECE_SIZE_WEIGHTS = {
+  'muito_pequena': 0.5,
+  'pequena': 1.0,
+  'media': 1.5,
+  'grande': 2.0,
+  'muito_grande': 3.0
 };
+const ReportSummaryCards = ({
+  logs,
+  prevLogs
+}) => {
+  const [totalPieces, setTotalPieces] = useState('');
+  useEffect(() => {
+    const saved = localStorage.getItem('totalPiecesInPeriod');
+    if (saved) setTotalPieces(saved);
+  }, []);
+  const handleTotalPiecesChange = e => {
+    const val = e.target.value;
+    setTotalPieces(val);
+    localStorage.setItem('totalPiecesInPeriod', val);
+  };
 
+  // Calculations
+  const currentReworkCount = logs?.reduce((sum, l) => sum + (parseInt(l.quantidade) || 0), 0) || 0;
+  const prevReworkCount = prevLogs?.reduce((sum, l) => sum + (parseInt(l.quantidade) || 0), 0) || 0;
+  const trend = calculateTrendency(currentReworkCount, prevReworkCount);
+  const reworkData = calculateReworkPercentage(logs, totalPieces, PIECE_SIZE_WEIGHTS);
+  return <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Rework Total Card */}
+      <motion.div initial={{
+      opacity: 0,
+      y: 20
+    }} animate={{
+      opacity: 1,
+      y: 0
+    }} className="dashboard-card flex flex-col justify-between bg-gradient-to-br from-red-900/40 to-red-950/40 border-red-900/50">
+        <div className="flex justify-between items-start mb-4">
+          <div className="p-3 rounded-xl bg-slate-900/50 backdrop-blur-sm border border-white/10">
+            <AlertTriangle className="w-6 h-6 text-white" />
+          </div>
+        </div>
+        <div>
+          <h3 className="text-slate-300 font-medium text-sm mb-1">Retrabalho Total (Peças)</h3>
+          <p className="text-3xl font-bold text-white tracking-tight">{currentReworkCount}</p>
+          <p className="text-xs text-white/70 mt-2 font-medium">Soma bruta no período atual</p>
+        </div>
+      </motion.div>
+      
+      {/* Weighted Target Card with Input */}
+      <motion.div initial={{
+      opacity: 0,
+      y: 20
+    }} animate={{
+      opacity: 1,
+      y: 0
+    }} transition={{
+      delay: 0.1
+    }} className="dashboard-card flex flex-col justify-between bg-gradient-to-br from-amber-900/40 to-amber-950/40 border-amber-900/50 relative overflow-hidden">
+        <div className="flex justify-between items-start mb-4">
+          <div className="p-3 rounded-xl bg-slate-900/50 backdrop-blur-sm border border-white/10">
+            <Target className="w-6 h-6 text-white" />
+          </div>
+        </div>
+        <div>
+          <h3 className="text-slate-300 font-medium text-sm mb-3 leading-snug">
+            % de Retrabalho
+          </h3>
+          
+          <div className="relative mb-3 w-full max-w-[180px]">
+             <Edit3 className="w-4 h-4 text-amber-500 absolute left-3 top-1/2 -translate-y-1/2" />
+             <input type="number" value={totalPieces} onChange={handleTotalPiecesChange} placeholder="Total Prod: 5000" className="w-full bg-slate-900/80 border border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-white text-sm font-bold placeholder:text-slate-500 focus:ring-2 focus:ring-amber-500 focus:outline-none transition-all" />
+          </div>
+
+          {totalPieces && totalPieces > 0 ? <p className="text-3xl font-bold text-white tracking-tight">{reworkData.formatted}%</p> : <p className="text-sm font-semibold text-amber-300/80 mt-1">Insira o total de peças para calcular %</p>}
+        </div>
+      </motion.div>
+
+      {/* Trend Card */}
+      <motion.div initial={{
+      opacity: 0,
+      y: 20
+    }} animate={{
+      opacity: 1,
+      y: 0
+    }} transition={{
+      delay: 0.2
+    }} className="dashboard-card flex flex-col justify-between bg-gradient-to-br from-sky-900/40 to-sky-950/40 border-sky-900/50">
+        <div className="flex justify-between items-start mb-4">
+          <div className="p-3 rounded-xl bg-slate-900/50 backdrop-blur-sm border border-white/10">
+            <Activity className="w-6 h-6 text-white" />
+          </div>
+          <div className={`text-xs font-bold px-2 py-1 rounded-full ${trend.bgText} ${trend.color}`}>
+            {trend.status} {trend.percentageChange > 0 ? `${trend.percentageChange.toFixed(1)}%` : ''}
+          </div>
+        </div>
+        <div>
+          <h3 className="text-slate-300 font-medium text-sm mb-1">Tendência de Retrabalho</h3>
+          <p className="text-3xl font-bold text-white tracking-tight">{currentReworkCount}</p>
+          <p className="text-xs text-white/70 mt-2 font-medium">Período Anterior: {prevReworkCount} peças</p>
+        </div>
+      </motion.div>
+    </div>;
+};
 export default ReportSummaryCards;

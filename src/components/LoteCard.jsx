@@ -1,14 +1,17 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
 import WhatsAppMessageModal from '@/components/WhatsAppMessageModal';
 import ScheduleModal from '@/components/ScheduleModal';
 import FinanceConfirmationToast from '@/components/FinanceConfirmationToast';
+import AlertBadge from '@/components/AlertBadge';
+import AlertDetailsModal from '@/components/AlertDetailsModal';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useQualityAlerts } from '@/hooks/useQualityAlerts';
+import { checkAlertTrigger } from '@/services/qualityService';
 
 const StatusButton = React.memo(({ Icon, label, status, onClick, isDisabled = false, isLoading = false }) => {
   const colorMap = {
@@ -62,13 +65,19 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [imageUrl, setImageUrl] = useState(null);
   const [isLoadingImage, setIsLoadingImage] = useState(false);
+  const [selectedAlert, setSelectedAlert] = useState(null);
   
-  // Finance Toast State
   const [showFinanceToast, setShowFinanceToast] = useState(false);
 
-  // Quality Alerts Hook using client name
   const { alerts, loading: loadingAlerts } = useQualityAlerts(lote.cliente);
-  const [expandAlerts, setExpandAlerts] = useState(false);
+
+  // Filter alerts based on the color condition
+  const triggeredAlerts = useMemo(() => {
+    if (!alerts) return [];
+    return alerts.filter(alert => checkAlertTrigger(lote, alert));
+  }, [alerts, lote]);
+
+  const hasAlerts = triggeredAlerts.length > 0;
 
   const handleShowImage = async () => {
     if (!lote.foto) { toast({ title: "ℹ️ Sem imagem", description: "Nenhuma imagem foi cadastrada para este lote." }); return; }
@@ -196,47 +205,23 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9 }}
         whileHover={{ y: -5, boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.3)' }}
-        className={`glass-effect rounded-2xl overflow-hidden group flex flex-col h-full relative ${lote.promessa ? 'ring-2 ring-yellow-400 shadow-yellow-400/30 shadow-lg' : ''}`}
+        className={`glass-effect rounded-2xl overflow-hidden group flex flex-col h-auto min-h-[100px] relative ${lote.promessa ? 'ring-2 ring-yellow-400 shadow-yellow-400/30 shadow-lg' : ''} ${hasAlerts ? 'ring-2 ring-red-500 shadow-red-500/30 shadow-lg' : ''}`}
       >
-        {lote.promessa && <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 rounded-full p-1.5 z-10 shadow-lg"><Star className="w-4 h-4" fill="currentColor" /></div>}
+        {lote.promessa && !hasAlerts && <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 rounded-full p-1.5 z-10 shadow-lg"><Star className="w-4 h-4" fill="currentColor" /></div>}
         
         <div className="p-4 flex flex-col flex-grow gap-3">
-          {/* Prominent Quality Alert Banner */}
-          {!loadingAlerts && alerts && alerts.length > 0 && (
-             <div className="w-full">
-               <div 
-                 className="quality-alert-banner"
-                 onClick={() => setExpandAlerts(!expandAlerts)}
-               >
-                 <div className="flex items-center gap-1.5">
-                   <AlertTriangle className="w-4 h-4 fill-red-800 text-white" />
-                   <span>{alerts.length} ALERTA(S) DE QUALIDADE</span>
-                 </div>
-                 {expandAlerts ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-               </div>
-               
-               <AnimatePresence>
-                 {expandAlerts && (
-                   <motion.div 
-                     initial={{ opacity: 0, height: 0 }}
-                     animate={{ opacity: 1, height: 'auto' }}
-                     exit={{ opacity: 0, height: 0 }}
-                     className="bg-red-950/40 border border-red-500/30 rounded-lg p-2 mb-3 space-y-2 overflow-hidden"
-                   >
-                     {alerts.map((a, i) => (
-                       <div key={a.id || i} className="text-xs text-red-200 border-b border-red-500/20 pb-2 last:border-0 last:pb-0">
-                         <strong className="block text-red-400 mb-0.5">Criado em {new Date(a.created_at).toLocaleDateString()}</strong>
-                         <span className="line-clamp-3">{a.description}</span>
-                       </div>
-                     ))}
-                   </motion.div>
-                 )}
-               </AnimatePresence>
+          
+          {/* Quality Alerts Badges - Only rendering matching alerts */}
+          {!loadingAlerts && hasAlerts && (
+             <div className="w-full space-y-2 mb-2">
+               {triggeredAlerts.map((alert) => (
+                 <AlertBadge key={alert.id} alert={alert} isAdmin={isAdmin} onViewDetails={setSelectedAlert} />
+               ))}
              </div>
           )}
 
           <div className="flex items-start gap-2">
-              <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
+              <div className="flex flex-col gap-2 w-[48px] flex-shrink-0 z-0">
                 <StatusButton 
                   Icon={DollarSign} 
                   label="Pago" 
@@ -247,7 +232,7 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
                 <StatusButton Icon={Ruler} label="Medida" status={lote.medida} onClick={() => handleToggleStatus('medida', lote.medida)} isDisabled={!isAdmin} />
                 {lote.precisa_nota_fiscal && <StatusButton Icon={FileText} label="NF" status={lote.nota_fiscal} onClick={() => handleToggleStatus('nota_fiscal', lote.nota_fiscal)} isDisabled={!isAdmin} />}
               </div>
-              <div className="flex-grow min-w-0 text-center flex flex-col items-center">
+              <div className="flex-grow min-w-0 text-center flex flex-col items-center z-0">
                   <div className="w-24 h-24 flex-shrink-0 bg-slate-900/50 rounded-lg flex items-center justify-center cursor-pointer overflow-hidden mb-2 group/eye" onClick={handleShowImage}>
                      <div className="flex flex-col items-center justify-center gap-1 text-slate-400 group-hover/eye:text-sky-300 group-hover/eye:scale-110 transition-all duration-300">
                       <Eye className="w-8 h-8"/>
@@ -259,15 +244,12 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
                   <div className="relative w-full">
                      <h3 className="text-lg font-bold text-shadow-lg text-slate-100 truncate w-full flex items-center justify-center gap-1">
                         {lote.cliente}
-                        {!loadingAlerts && alerts && alerts.length > 0 && (
-                          <AlertTriangle className="w-4 h-4 text-red-500 fill-red-500/20" title="Cliente com Alerta" />
-                        )}
                      </h3>
                   </div>
 
                   <p className="text-sm text-slate-300 text-shadow truncate w-full mb-2">{lote.cor} • {lote.quantidade ? `${lote.quantidade} peças` : 'N/A'}</p>
               </div>
-              <div className="flex flex-col gap-2 w-[48px] flex-shrink-0">
+              <div className="flex flex-col gap-2 w-[48px] flex-shrink-0 z-0">
                 <SimpleStatusButton Icon={CalendarCheck} label="Progr." isActive={lote.programado} onClick={handleScheduleClick} colorClass="programado" />
                 <SimpleStatusButton Icon={CheckCircle} label="Pintado" isActive={lote.pintado} onClick={() => onUpdateStatus(lote.id, { pintado: !lote.pintado })} colorClass="pintado" />
                 <motion.button whileHover={{scale: 1.05, y: -2}} whileTap={{scale: 0.95}} onClick={() => onUpdateStatus(lote.id, { promessa: !lote.promessa })} className={`p-2 rounded-lg flex flex-col items-center justify-center gap-1.5 w-full ring-2 ${lote.promessa ? 'bg-yellow-400 ring-yellow-400' : 'bg-slate-700/50 ring-transparent'}`}>
@@ -277,7 +259,7 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
               </div>
           </div>
           
-          <div className="grid grid-cols-3 gap-2 text-xs text-slate-400 text-center -mt-1">
+          <div className="grid grid-cols-3 gap-2 text-xs text-slate-400 text-center -mt-1 z-0">
             <div className="glass-effect px-2 py-1 rounded-md inline-flex items-center justify-center gap-1.5"><CalendarIcon className="w-3 h-3 text-sky-300" /><span>{formatDate(lote.data_criacao)}</span></div>
             {lote.data_pintura ? 
                 <div className="glass-effect px-2 py-1 rounded-md inline-flex items-center justify-center gap-1.5"><CheckCircle className="w-3 h-3 text-green-400" /><span>{formatDate(lote.data_pintura)}</span></div> : <div />
@@ -288,13 +270,13 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
           </div>
 
           {(lote.metodo_pagamento || lote.observacao) && (
-            <div className="glass-effect rounded-lg p-2 text-xs mt-auto space-y-1">
+            <div className="glass-effect rounded-lg p-2 text-xs mt-auto space-y-1 z-0">
                 {lote.metodo_pagamento && <div className="flex items-center gap-2 text-slate-300"><DollarSign className="w-3 h-3 flex-shrink-0 text-emerald-300" /><span>Pgto: <strong>{lote.metodo_pagamento}</strong></span></div>}
                 {lote.observacao && <div className="flex items-start gap-2 text-slate-300"><MessageSquare className="w-3 h-3 flex-shrink-0 text-amber-300 mt-0.5" /><span className="line-clamp-2">{lote.observacao}</span></div>}
             </div>
           )}
         </div>
-        <div className="border-t border-slate-700/60 p-2">
+        <div className="border-t border-slate-700/60 p-2 z-0">
           <div className="flex gap-2">
              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setShowQR(true)} className="p-2.5 glass-effect hover:bg-slate-700/60 rounded-xl" aria-label="Gerar QR Code"><QrCode className="w-4 h-4 text-sky-300" /></motion.button>
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => onEdit(lote)} className="p-2.5 glass-effect hover:bg-slate-700/60 rounded-xl" aria-label="Editar Lote"><Edit className="w-4 h-4 text-sky-300" /></motion.button>
@@ -332,6 +314,12 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
           </motion.div>
         </motion.div>
       )}
+
+      <AlertDetailsModal 
+        isOpen={!!selectedAlert} 
+        onClose={() => setSelectedAlert(null)} 
+        alert={selectedAlert} 
+      />
     </>
   );
 };

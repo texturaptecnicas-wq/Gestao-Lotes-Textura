@@ -1,6 +1,6 @@
+
 export const getNextDay = (dateString) => {
   if (!dateString) return null;
-  // Parse date as local time to avoid timezone shifts
   const [year, month, day] = dateString.split('-');
   const date = new Date(year, month - 1, day);
   date.setDate(date.getDate() + 1);
@@ -22,30 +22,40 @@ export const getDateRange = (periodType) => {
     return `${yyyy}-${mm}-${dd}`;
   };
 
-  const endStr = formatDate(today);
-  let startStr = endStr;
+  let startStr = formatDate(today);
+  let endStr = formatDate(today);
 
   switch (periodType) {
     case 'today':
       startStr = endStr;
       break;
-    case 'week':
-      const weekAgo = new Date(today);
-      weekAgo.setDate(today.getDate() - 7);
-      startStr = formatDate(weekAgo);
+    case 'week': {
+      // Calculate Monday to Friday of the current week
+      const day = today.getDay(); // 0 is Sunday, 1 is Monday
+      const diffToMonday = today.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(today);
+      monday.setDate(diffToMonday);
+      
+      const friday = new Date(monday);
+      friday.setDate(monday.getDate() + 4);
+      
+      startStr = formatDate(monday);
+      endStr = formatDate(friday);
       break;
-    case 'month':
+    }
+    case 'month': {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       startStr = formatDate(firstDayOfMonth);
-      
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      // Optional: If we want 'Este Mês' to cover the whole month including future days
-      // return { startDate: startStr, endDate: formatDate(lastDayOfMonth) };
+      // Let it go to the current day or end of month depending on preference. Using current day for now.
+      endStr = formatDate(today); 
       break;
-    case 'year':
+    }
+    case 'year': {
       const firstDayOfYear = new Date(today.getFullYear(), 0, 1);
       startStr = formatDate(firstDayOfYear);
+      endStr = formatDate(today);
       break;
+    }
     default:
       startStr = endStr;
   }
