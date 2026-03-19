@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, CheckCircle, Plus, Loader2, ListTodo, ShieldAlert, Camera, UploadCloud, Trash2, PieChart } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, Plus, Loader2, ListTodo, ShieldAlert, Camera, UploadCloud, Trash2, PieChart, Maximize, Minimize } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { createQualityAlert, getAllAlerts, deactivateAlert, uploadAlertImage } from '@/services/qualityService';
 import QualityDailyLog from './QualityDailyLog';
 import QualityReports from './QualityReports';
 import AlertBadge from './AlertBadge';
 import EditAlertModal from './EditAlertModal';
+import { useFullscreen } from '@/hooks/useFullscreen';
 
 const QualityModal = ({
   isOpen,
@@ -31,6 +32,8 @@ const QualityModal = ({
   
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+
+  const { isFullscreen, toggleFullscreen, elementRef } = useFullscreen();
 
   useEffect(() => {
     if (isOpen && activeTab === 'alertas') {
@@ -168,8 +171,15 @@ const QualityModal = ({
   const isAdmin = userRole === 'administrador';
 
   return <AnimatePresence>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-        <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} onClick={e => e.stopPropagation()} className="glass-effect rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col relative overflow-hidden bg-slate-900 border border-slate-800">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className={`fixed inset-0 z-[100] flex items-center justify-center ${isFullscreen ? 'p-0' : 'p-4 bg-black/70 backdrop-blur-sm'}`}>
+        <motion.div 
+          ref={elementRef}
+          initial={isFullscreen ? {} : { scale: 0.9, opacity: 0, y: 20 }} 
+          animate={isFullscreen ? { scale: 1, opacity: 1, y: 0 } : { scale: 1, opacity: 1, y: 0 }} 
+          exit={isFullscreen ? {} : { scale: 0.9, opacity: 0, y: 20 }} 
+          onClick={e => e.stopPropagation()} 
+          className={`glass-effect w-full flex flex-col relative overflow-hidden bg-slate-900 border border-slate-800 ${isFullscreen ? 'h-full rounded-none border-none' : 'max-w-6xl h-[90vh] rounded-2xl'}`}
+        >
           <div className="flex flex-col border-b border-slate-800 bg-slate-900/80">
             <div className="flex items-center justify-between p-4 px-6">
               <div className="flex items-center gap-3">
@@ -178,9 +188,16 @@ const QualityModal = ({
                 </div>
                 <h2 className="text-2xl font-bold text-white">Controle de Qualidade</h2>
               </div>
-              <motion.button whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.9 }} onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400">
-                <X className="w-5 h-5" />
-              </motion.button>
+              <div className="flex items-center gap-2">
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={toggleFullscreen} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400" title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}>
+                  {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                </motion.button>
+                {!isFullscreen && (
+                  <motion.button whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.9 }} onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400">
+                    <X className="w-5 h-5" />
+                  </motion.button>
+                )}
+              </div>
             </div>
             
             <div className="flex px-6 gap-2 pt-2 overflow-x-auto custom-scrollbar pb-1">

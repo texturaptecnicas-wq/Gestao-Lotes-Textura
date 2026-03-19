@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Maximize, Minimize } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getFilteredLogs, getFilterOptions, getReportDataByDateRange, getProblemsFrequency } from '@/services/qualityService';
 import ReportFilters from './ReportFilters';
@@ -9,6 +10,8 @@ import ReportProblemsChart from './ReportProblemsChart';
 import ReportSolutionsChart from './ReportSolutionsChart';
 import ReportExport from './ReportExport';
 import { getDateRange } from '@/utils/getDateRange';
+import { useFullscreen } from '@/hooks/useFullscreen';
+
 const QualityReports = () => {
   const [loading, setLoading] = useState(true);
   const [filterOptions, setFilterOptions] = useState({
@@ -31,6 +34,9 @@ const QualityReports = () => {
     evolutionData: [],
     problemsData: []
   });
+  
+  const { isFullscreen, toggleFullscreen, elementRef } = useFullscreen();
+
   useEffect(() => {
     getFilterOptions().then(setFilterOptions).catch(console.error);
   }, []);
@@ -79,11 +85,23 @@ const QualityReports = () => {
       ...newFilters
     }));
   };
-  return <div className="flex flex-col h-full overflow-y-auto custom-scrollbar p-4 md:p-8 bg-slate-950/80 print:bg-white print:text-black">
+  return <div 
+      ref={elementRef}
+      className={`flex flex-col h-full overflow-y-auto custom-scrollbar bg-slate-950/80 print:bg-white print:text-black ${isFullscreen ? 'p-8 bg-slate-950' : 'p-4 md:p-8'}`}
+    >
       
-      <div className="mb-6 print:hidden">
-        <h2 className="text-2xl font-bold text-white tracking-tight">Dashboard Retrabalho</h2>
-        <p className="text-slate-400">Análise detalhada de retrabalho e qualidade</p>
+      <div className="mb-6 print:hidden flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-white tracking-tight">Dashboard Retrabalho</h2>
+          <p className="text-slate-400">Análise detalhada de retrabalho e qualidade</p>
+        </div>
+        <button
+          onClick={toggleFullscreen}
+          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+          title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}
+        >
+          {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+        </button>
       </div>
 
       <div className="print:hidden">
