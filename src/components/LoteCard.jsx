@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle } from 'lucide-react';
@@ -5,7 +6,6 @@ import { toast } from '@/components/ui/use-toast';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
 import WhatsAppMessageModal from '@/components/WhatsAppMessageModal';
 import ScheduleModal from '@/components/ScheduleModal';
-import FinanceConfirmationToast from '@/components/FinanceConfirmationToast';
 import AlertBadge from '@/components/AlertBadge';
 import AlertDetailsModal from '@/components/AlertDetailsModal';
 import { supabase } from '@/lib/customSupabaseClient';
@@ -57,7 +57,7 @@ const SimpleStatusButton = React.memo(({ Icon, label, isActive, onClick, colorCl
 });
 SimpleStatusButton.displayName = 'SimpleStatusButton';
 
-const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit, onRegisterFinance }) => {
+const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit }) => {
   const [showQR, setShowQR] = useState(false);
   const [showImage, setShowImage] = useState(false);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -66,11 +66,8 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
   const [isLoadingImage, setIsLoadingImage] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState(null);
   
-  const [showFinanceToast, setShowFinanceToast] = useState(false);
-
   const { alerts, loading: loadingAlerts } = useQualityAlerts(lote.cliente);
 
-  // Filter alerts based on the color condition
   const triggeredAlerts = useMemo(() => {
     if (!alerts) return [];
     return alerts.filter(alert => checkAlertTrigger(lote, alert));
@@ -99,49 +96,12 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
       return;
     }
 
-    if (field === 'pago') {
-      const cycle = {
-        'unanalysed': 'pending', 
-        'pending': 'ok',         
-        'ok': 'unanalysed'       
-      };
-
-      const safeCurrentStatus = ['ok', 'pending', 'unanalysed'].includes(currentStatus) ? currentStatus : 'unanalysed';
-      const nextStatus = cycle[safeCurrentStatus];
-
-      onUpdateStatus(lote.id, { pago: nextStatus });
-
-      if (nextStatus === 'ok') {
-        setShowFinanceToast(true);
-      } else {
-        setShowFinanceToast(false);
-      }
-      return;
-    }
-
     const nextStatus = { 'unanalysed': 'pending', 'pending': 'ok', 'ok': 'unanalysed' };
     onUpdateStatus(lote.id, { [field]: nextStatus[currentStatus] });
-  };
-
-  const handleFinanceConfirm = () => {
-    setShowFinanceToast(false);
-    if (onRegisterFinance) {
-        onRegisterFinance(lote);
-    } else {
-        toast({ title: "Erro", description: "Funcionalidade de redirecionamento não disponível.", variant: "destructive" });
+    
+    if (field === 'pago' && nextStatus[currentStatus] === 'ok') {
+      toast({ title: "✅ Pagamento OK", description: "O status foi atualizado no lote." });
     }
-  };
-
-  const handleFinanceCancel = () => {
-    onUpdateStatus(lote.id, { pago: 'pending' });
-    setShowFinanceToast(false);
-    toast({
-      description: "Pagamento não confirmado. Status revertido.",
-    });
-  };
-
-  const handleFinanceDismiss = () => {
-    setShowFinanceToast(false);
   };
 
   const handleWhatsAppClick = () => {
@@ -191,13 +151,6 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
 
   return (
     <>
-      <FinanceConfirmationToast 
-        isVisible={showFinanceToast}
-        onConfirm={handleFinanceConfirm}
-        onCancel={handleFinanceCancel}
-        onDismiss={handleFinanceDismiss}
-      />
-      
       <motion.div
         layout
         initial={{ opacity: 0, y: 20 }}
@@ -209,8 +162,6 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
         {lote.promessa && !hasAlerts && <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 rounded-full p-1.5 z-10 shadow-lg"><Star className="w-4 h-4" fill="currentColor" /></div>}
         
         <div className="p-4 flex flex-col flex-grow gap-3">
-          
-          {/* Quality Alerts Badges - Only rendering matching alerts */}
           {!loadingAlerts && hasAlerts && (
              <div className="w-full space-y-2 mb-2">
                {triggeredAlerts.map((alert) => (
@@ -294,14 +245,20 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
               </motion.button>
             )}
             
-            <motion.button whileHover={{ scale: isReadyForDelivery ? 1.02 : 1 }} whileTap={{ scale: isReadyForDelivery ? 0.98 : 1 }} onClick={() => onMarcarEntregue(lote.id)} className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${isReadyForDelivery ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg shadow-green-500/30' : 'bg-slate-600/50 text-slate-400 cursor-not-allowed'}`}><Truck className="w-4 h-4" />Entregar</motion.button>
+            <motion.button 
+              whileHover={{ scale: isReadyForDelivery ? 1.02 : 1 }} 
+              whileTap={{ scale: isReadyForDelivery ? 0.98 : 1 }} 
+              onClick={() => onMarcarEntregue(lote.id)} 
+              className={`flex-1 px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all ${isReadyForDelivery ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg shadow-green-500/30' : 'bg-slate-600/50 text-slate-400 cursor-not-allowed'}`}
+            >
+              <Truck className="w-4 h-4" />Entregar
+            </motion.button>
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => { if (window.confirm('Tem certeza?')) { onDelete(lote.id); } }} className={`p-2.5 glass-effect rounded-xl text-slate-400 ${isAdmin ? 'hover:bg-red-500/20 hover:text-red-400' : 'opacity-50 cursor-not-allowed'}`} aria-label="Excluir Lote" disabled={!isAdmin}><Trash2 className="w-4 h-4" /></motion.button>
           </div>
         </div>
       </motion.div>
       {showQR && <QRCodeGenerator loteId={lote.id} cliente={lote.cliente} onClose={() => setShowQR(false)} />}
       {showWhatsAppModal && <WhatsAppMessageModal isOpen={showWhatsAppModal} onClose={() => setShowWhatsAppModal(false)} onSave={() => {}} />}
-      
       {showScheduleModal && <ScheduleModal isOpen={showScheduleModal} onClose={() => setShowScheduleModal(false)} loteId={lote.id} currentCabine={lote.cabine} />}
       
       {showImage && (

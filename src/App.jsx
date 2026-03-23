@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, LogOut, DollarSign, Ruler, FileText, FilterX, ShieldAlert, LineChart } from 'lucide-react';
+import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, LogOut, DollarSign, Ruler, FileText, FilterX, ShieldAlert } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Toaster } from '@/components/ui/toaster';
 import { toast } from '@/components/ui/use-toast';
@@ -306,13 +307,12 @@ function App() {
     <DragDropContext onDragEnd={handleDragEnd}>
       <Helmet>
         <title>Sistema de Gestão - Textura Técnicas</title>
-        <meta name="description" content="Sistema integrado para gestão de lotes e financeiro." />
+        <meta name="description" content="Sistema integrado para gestão de lotes e qualidade." />
       </Helmet>
 
-      {/* Main Admin/User View Container */}
       <div className="min-h-screen">
         
-        {/* Render Finance Module if selected by Admin */}
+        {/* Render Finance Module if selected by Admin (Restored if needed, but menu access removed as requested) */}
         {activeModule === 'financeiro' && userRole === 'administrador' && (
           <Suspense fallback={<LoadingFallback />}>
              <FinanceModule onBack={() => setActiveModule('lotes')} />
@@ -329,14 +329,6 @@ function App() {
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="hidden sm:inline text-sm font-semibold glass-effect px-3 py-2 rounded-lg">{userRole === 'administrador' ? '👑 Admin' : '👤 Usuário'}</span>
                     
-                    {/* Finance Access for Admins */}
-                    {userRole === 'administrador' && (
-                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setActiveModule('financeiro')} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60 text-emerald-400 border border-emerald-500/30">
-                        <LineChart className="w-5 h-5" />
-                        <span className="hidden sm:inline">Financeiro</span>
-                      </motion.button>
-                    )}
-
                     <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsQualityModalOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60 text-amber-400 border border-amber-500/30">
                       <ShieldAlert className="w-5 h-5" />
                       <span className="hidden sm:inline">Qualidade</span>
@@ -433,7 +425,6 @@ function App() {
                                         onMarcarEntregue={handleMarcarEntregue} 
                                         onDelete={handleDeleteLote} 
                                         onEdit={handleOpenEditModal} 
-                                        onRegisterFinance={() => {}} // Legacy prop handled inside LoteCard or removed, but passing stub to prevent crashes
                                       />
                                     </div>
                                   )}
