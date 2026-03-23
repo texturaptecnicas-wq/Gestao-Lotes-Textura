@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import { getRecordWeight } from '@/services/qualityService';

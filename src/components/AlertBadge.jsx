@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { AlertTriangle, Palette, CheckCircle, Edit, Eye } from 'lucide-react';
 

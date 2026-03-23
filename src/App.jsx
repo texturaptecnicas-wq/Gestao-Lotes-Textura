@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, Info, LogOut, DollarSign, Ruler, FileText, FilterX, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, LogOut, DollarSign, Ruler, FileText, FilterX, ShieldAlert, LineChart } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Toaster } from '@/components/ui/toaster';
 import { toast } from '@/components/ui/use-toast';
@@ -16,7 +16,6 @@ const LoginScreen = React.lazy(() => import('@/components/LoginScreen'));
 const FinanceLogin = React.lazy(() => import('@/components/FinanceLogin'));
 const FinanceModule = React.lazy(() => import('@/components/FinanceModule'));
 const CabineSelectModal = React.lazy(() => import('@/components/CabineSelectModal'));
-const PIXRegistrationModal = React.lazy(() => import('@/components/PIXRegistrationModal'));
 const QualityModal = React.lazy(() => import('@/components/QualityModal'));
 
 const LoadingFallback = () => (
@@ -43,8 +42,8 @@ function App() {
   const [statusFilters, setStatusFilters] = useState({ pago: 'any', medida: 'any', nota_fiscal: 'any' });
   const [cabineFilter, setCabineFilter] = useState('1');
   
-  // Finance Flow State
-  const [financeFlowLote, setFinanceFlowLote] = useState(null);
+  // App Navigation State
+  const [activeModule, setActiveModule] = useState('lotes'); // 'lotes' | 'financeiro'
 
   // Auth State
   const [userRole, setUserRole] = useState(null);
@@ -57,9 +56,9 @@ function App() {
     const storedType = localStorage.getItem('loginType');
     
     if (storedRole) {
-      console.log("Restoring session:", storedRole, storedType);
       setUserRole(storedRole);
       setLoginType(storedType || 'usuario');
+      if (storedType === 'financeiro') setActiveModule('financeiro');
     }
   }, []);
 
@@ -86,7 +85,7 @@ function App() {
 
   // Subscriptions & Data Load triggers
   useEffect(() => {
-    if (!userRole || loginType === 'financeiro') return;
+    if (!userRole || activeModule === 'financeiro') return;
     
     fetchLotes();
     fetchHistorico();
@@ -103,11 +102,10 @@ function App() {
       supabase.removeChannel(lotesSubscription);
       supabase.removeChannel(historicoSubscription);
     };
-  }, [userRole, loginType, fetchLotes, fetchHistorico]);
+  }, [userRole, activeModule, fetchLotes, fetchHistorico]);
   
   // Handlers
   const handleLogin = useCallback((role) => {
-    console.log("App: Login attempt for role:", role);
     if (role === 'financeiro') {
       setShowFinanceLogin(true);
       return;
@@ -116,25 +114,26 @@ function App() {
     localStorage.setItem('loginType', role === 'administrador' ? 'admin' : 'usuario');
     setUserRole(role);
     setLoginType(role === 'administrador' ? 'admin' : 'usuario');
+    setActiveModule('lotes');
   }, []);
 
   const handleFinanceLogin = useCallback((type) => {
-    console.log("App: Finance login success callback triggered with type:", type);
     const roleType = type || 'financeiro';
     localStorage.setItem('userRole', roleType);
     localStorage.setItem('loginType', roleType);
     setUserRole(roleType);
     setLoginType(roleType);
     setShowFinanceLogin(false);
+    setActiveModule('financeiro');
   }, []);
 
   const handleLogout = useCallback(() => {
-    console.log("Logging out");
     localStorage.removeItem('userRole');
     localStorage.removeItem('loginType');
     setUserRole(null);
     setLoginType(null);
     setShowFinanceLogin(false);
+    setActiveModule('lotes');
   }, []);
 
   const handleOpenAddModal = useCallback(() => { setEditingLote(null); setIsAddModalOpen(true); }, []);
@@ -226,10 +225,6 @@ function App() {
     if (error) { toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" }); } 
     else { toast({ title: "🗑️ Lote removido do histórico", description: "Lote excluído." }); }
   }, [userRole, historico]);
-  
-  const handleRegisterFinanceRedirect = useCallback((lote) => {
-    setFinanceFlowLote(lote);
-  }, []);
 
   const resetAllFilters = useCallback(() => { setSearchTerm(''); setStatusFilters({ pago: 'any', medida: 'any', nota_fiscal: 'any' }); }, []);
   const handleFilterChange = useCallback((newFilter) => { setFilterStatus(newFilter); if (newFilter === 'programado') { setCabineFilter('1'); } window.scrollTo(0, 0); }, []);
@@ -279,18 +274,7 @@ function App() {
   ];
   const cabineFilterOptions = ['1', '2', '3', '4', 'all'];
 
-  if (loginType === 'financeiro' || financeFlowLote) {
-    return (
-      <Suspense fallback={<LoadingFallback />}>
-        <FinanceModule 
-            onLogout={loginType === 'financeiro' ? handleLogout : undefined} 
-            loteData={financeFlowLote}
-            onReturn={financeFlowLote ? () => setFinanceFlowLote(null) : undefined}
-        />
-      </Suspense>
-    );
-  }
-
+  // Auth/Login Screens handling
   if (!userRole) {
     if (showFinanceLogin) {
       return (
@@ -306,115 +290,166 @@ function App() {
     );
   }
 
+  // Pure Finance User View
+  if (loginType === 'financeiro' && activeModule === 'financeiro') {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <FinanceModule onBack={handleLogout} />
+        <Toaster />
+      </Suspense>
+    );
+  }
+
   const currentLotes = filteredLotes[filterStatus] || [];
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
       <Helmet>
-        <title>Sistema de Gestão de Lotes - Textura Técnicas</title>
-        <meta name="description" content="Sistema otimizado para gestão de lotes industriais." />
+        <title>Sistema de Gestão - Textura Técnicas</title>
+        <meta name="description" content="Sistema integrado para gestão de lotes e financeiro." />
       </Helmet>
 
-      <div className="min-h-screen p-4 md:p-8">
-        <div className="max-w-7xl mx-auto">
-          <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-              <h1 className="text-4xl md:text-5xl font-bold gradient-text">Gestão de Lotes</h1>
-              <div className="flex items-center gap-3">
-                <span className="hidden sm:inline text-sm font-semibold glass-effect px-3 py-2 rounded-lg">{userRole === 'administrador' ? '👑 Admin' : '👤 Usuário'}</span>
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleLogout} className="glass-effect p-3 rounded-xl hover:bg-red-500/20" aria-label="Sair"><LogOut className="w-5 h-5 text-red-400" /></motion.button>
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsQualityModalOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60 text-amber-400 border border-amber-500/30"><ShieldAlert className="w-5 h-5" /><span className="hidden sm:inline">Qualidade</span></motion.button>
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsQRScannerOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60"><QrCode className="w-5 h-5 text-sky-300" /><span className="hidden sm:inline">Escanear</span></motion.button>
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsHistoricoOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60"><Truck className="w-5 h-5 text-sky-300" /><span className="hidden sm:inline">Entregues</span></motion.button>
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleOpenAddModal} className="bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:from-sky-600 hover:to-indigo-600 shadow-lg shadow-sky-500/30"><Plus className="w-5 h-5" /><span className="hidden sm:inline">Novo Lote</span></motion.button>
-              </div>
-            </div>
-            
-            <div className="flex flex-col md:flex-row gap-4 mb-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input type="text" placeholder="Buscar por cliente ou cor..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full glass-effect pl-12 pr-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500" />
-              </div>
-            </div>
-            
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-6">
-                <div className="flex items-center gap-2"><DollarSign className="w-5 h-5 text-emerald-300"/><select value={statusFilters.pago} onChange={e => handleStatusFilterChange('pago', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm"><option value="any">Pago</option><option value="ok">OK</option><option value="pending">Pendente</option><option value="unanalysed">N/A</option></select></div>
-                <div className="flex items-center gap-2"><Ruler className="w-5 h-5 text-cyan-300"/><select value={statusFilters.medida} onChange={e => handleStatusFilterChange('medida', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm"><option value="any">Medida</option><option value="ok">OK</option><option value="pending">Pendente</option><option value="unanalysed">N/A</option></select></div>
-                <div className="flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-300"/><select value={statusFilters.nota_fiscal} onChange={e => handleStatusFilterChange('nota_fiscal', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm"><option value="any">NF</option><option value="ok">OK</option><option value="pending">Pendente</option><option value="unanalysed">N/A</option></select></div>
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={resetAllFilters} className="glass-effect px-4 py-1.5 rounded-lg text-sm flex items-center gap-2"><FilterX className="w-4 h-4" />Limpar</motion.button>
-                <div className="glass-effect px-4 py-1.5 rounded-lg text-sm flex items-center gap-2 font-semibold">
-                    <Package className="w-4 h-4 text-slate-300" />
-                    <span>Total: {stats.total}</span>
-                </div>
-            </div>
+      {/* Main Admin/User View Container */}
+      <div className="min-h-screen">
+        
+        {/* Render Finance Module if selected by Admin */}
+        {activeModule === 'financeiro' && userRole === 'administrador' && (
+          <Suspense fallback={<LoadingFallback />}>
+             <FinanceModule onBack={() => setActiveModule('lotes')} />
+          </Suspense>
+        )}
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 glass-effect rounded-xl p-1">
-              {filterOptions.map((status, index) => (
-                <motion.button 
-                  key={status.id} 
-                  layout 
-                  onClick={() => handleFilterChange(status.id)} 
-                  className={`relative w-full px-2 py-3 rounded-lg font-semibold whitespace-nowrap transition-colors flex items-center justify-center gap-2 text-xs md:text-sm ${filterStatus === status.id ? '' : 'text-slate-300 hover:text-white'} ${index === 2 ? 'col-span-2 md:col-span-1' : ''}`}
-                >
-                  {filterStatus === status.id && <motion.div layoutId="active-pill" className="absolute inset-0 bg-gradient-to-r from-sky-500 to-indigo-500 rounded-lg z-0" />}
-                  <div className="relative z-10 flex items-center gap-1.5 md:gap-2">
-                    <status.icon className="w-4 h-4 md:w-5 md:h-5" />
-                    <span className="truncate">{status.label}</span>
-                    <span className="bg-slate-900/50 text-white text-xs md:text-base font-bold px-2 py-0.5 rounded-full">{status.count}</span>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-
-            {filterStatus === 'programado' && (
-              <div className="mt-4 glass-effect rounded-xl p-1 flex items-center gap-1 flex-wrap">
-                {cabineFilterOptions.map(cab => (
-                   <motion.button key={cab} layout onClick={() => setCabineFilter(cab)} className={`relative flex-1 px-3 py-2 rounded-lg font-semibold transition-colors text-sm min-w-[80px] ${cabineFilter === cab ? '' : 'text-slate-300 hover:text-white'}`}>
-                    {cabineFilter === cab && <motion.div layoutId="active-cabine-pill" className="absolute inset-0 bg-slate-700/80 rounded-lg z-0" />}
-                    <span className="relative z-10">{cab === 'all' ? 'Todas' : `Cab. ${cab}`}</span>
-                   </motion.button>
-                ))}
-              </div>
-            )}
-          </motion.header>
-          
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-            <AnimatePresence mode="wait">
-              <motion.div key={filterStatus}>
-                {lotes.length === 0 && searchTerm === '' ? (
-                  <div className="text-center p-12 glass-effect rounded-2xl"><Package className="w-16 h-16 mx-auto mb-4 text-slate-500 animate-pulse" /><h3 className="text-2xl font-bold mb-2">Carregando lotes...</h3><p className="text-slate-400">Só um momento, estamos buscando os dados.</p></div>
-                ) : currentLotes.length === 0 ? (
-                  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-effect p-12 rounded-2xl text-center"><Package className="w-16 h-16 mx-auto mb-4 text-slate-500" /><h3 className="text-2xl font-bold mb-2">Nenhum lote encontrado</h3><p className="text-slate-400 mb-6">Tente ajustar os filtros ou adicione um novo lote.</p><motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleOpenAddModal} className="bg-gradient-to-r from-sky-500 to-indigo-500 px-8 py-3 rounded-xl font-semibold inline-flex items-center gap-2 shadow-lg shadow-sky-500/30"><Plus className="w-5 h-5" />Adicionar Lote</motion.button></motion.div>
-                ) : (
-                  <Droppable droppableId={`cabine-${cabineFilter}`} isDropDisabled={filterStatus !== 'programado' || cabineFilter === 'all'}>
-                    {(provided) => (
-                      <div ref={provided.innerRef} {...provided.droppableProps} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-start">
-                          {currentLotes.sort((a,b) => (a.ordem_pintura ?? 999) - (b.ordem_pintura ?? 999)).map((lote, index) => (
-                            <Draggable key={lote.id} draggableId={lote.id.toString()} index={index} isDragDisabled={filterStatus !== 'programado' || cabineFilter === 'all'}>
-                              {(provided) => (
-                                <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                                  <LoteCard 
-                                    lote={lote} 
-                                    userRole={userRole} 
-                                    onUpdateStatus={handleUpdateLoteStatus} 
-                                    onMarcarEntregue={handleMarcarEntregue} 
-                                    onDelete={handleDeleteLote} 
-                                    onEdit={handleOpenEditModal} 
-                                    onRegisterFinance={handleRegisterFinanceRedirect}
-                                  />
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                        {provided.placeholder}
-                      </div>
+        {/* Render Lotes Module */}
+        {activeModule === 'lotes' && (
+          <div className="p-4 md:p-8">
+            <div className="max-w-7xl mx-auto">
+              <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                  <h1 className="text-4xl md:text-5xl font-bold gradient-text">Gestão de Lotes</h1>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="hidden sm:inline text-sm font-semibold glass-effect px-3 py-2 rounded-lg">{userRole === 'administrador' ? '👑 Admin' : '👤 Usuário'}</span>
+                    
+                    {/* Finance Access for Admins */}
+                    {userRole === 'administrador' && (
+                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setActiveModule('financeiro')} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60 text-emerald-400 border border-emerald-500/30">
+                        <LineChart className="w-5 h-5" />
+                        <span className="hidden sm:inline">Financeiro</span>
+                      </motion.button>
                     )}
-                  </Droppable>
+
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsQualityModalOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60 text-amber-400 border border-amber-500/30">
+                      <ShieldAlert className="w-5 h-5" />
+                      <span className="hidden sm:inline">Qualidade</span>
+                    </motion.button>
+
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsQRScannerOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60">
+                      <QrCode className="w-5 h-5 text-sky-300" />
+                      <span className="hidden lg:inline">Escanear</span>
+                    </motion.button>
+
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setIsHistoricoOpen(true)} className="glass-effect px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-slate-700/60">
+                      <Truck className="w-5 h-5 text-sky-300" />
+                      <span className="hidden lg:inline">Entregues</span>
+                    </motion.button>
+
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleOpenAddModal} className="bg-gradient-to-r from-sky-500 to-indigo-500 px-4 py-3 rounded-xl font-semibold flex items-center gap-2 hover:from-sky-600 hover:to-indigo-600 shadow-lg shadow-sky-500/30">
+                      <Plus className="w-5 h-5" />
+                      <span className="hidden sm:inline">Novo</span>
+                    </motion.button>
+
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleLogout} className="glass-effect p-3 rounded-xl hover:bg-red-500/20" aria-label="Sair">
+                      <LogOut className="w-5 h-5 text-red-400" />
+                    </motion.button>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col md:flex-row gap-4 mb-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input type="text" placeholder="Buscar por cliente ou cor..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full glass-effect pl-12 pr-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500" />
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-6">
+                    <div className="flex items-center gap-2"><DollarSign className="w-5 h-5 text-emerald-300"/><select value={statusFilters.pago} onChange={e => handleStatusFilterChange('pago', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm"><option value="any">Pago</option><option value="ok">OK</option><option value="pending">Pendente</option><option value="unanalysed">N/A</option></select></div>
+                    <div className="flex items-center gap-2"><Ruler className="w-5 h-5 text-cyan-300"/><select value={statusFilters.medida} onChange={e => handleStatusFilterChange('medida', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm"><option value="any">Medida</option><option value="ok">OK</option><option value="pending">Pendente</option><option value="unanalysed">N/A</option></select></div>
+                    <div className="flex items-center gap-2"><FileText className="w-5 h-5 text-indigo-300"/><select value={statusFilters.nota_fiscal} onChange={e => handleStatusFilterChange('nota_fiscal', e.target.value)} className="glass-effect rounded-lg px-3 py-1.5 text-sm"><option value="any">NF</option><option value="ok">OK</option><option value="pending">Pendente</option><option value="unanalysed">N/A</option></select></div>
+                    <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={resetAllFilters} className="glass-effect px-4 py-1.5 rounded-lg text-sm flex items-center gap-2"><FilterX className="w-4 h-4" />Limpar</motion.button>
+                    <div className="glass-effect px-4 py-1.5 rounded-lg text-sm flex items-center gap-2 font-semibold">
+                        <Package className="w-4 h-4 text-slate-300" />
+                        <span>Total: {stats.total}</span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 glass-effect rounded-xl p-1">
+                  {filterOptions.map((status, index) => (
+                    <motion.button 
+                      key={status.id} 
+                      layout 
+                      onClick={() => handleFilterChange(status.id)} 
+                      className={`relative w-full px-2 py-3 rounded-lg font-semibold whitespace-nowrap transition-colors flex items-center justify-center gap-2 text-xs md:text-sm ${filterStatus === status.id ? '' : 'text-slate-300 hover:text-white'} ${index === 2 ? 'col-span-2 md:col-span-1' : ''}`}
+                    >
+                      {filterStatus === status.id && <motion.div layoutId="active-pill" className="absolute inset-0 bg-gradient-to-r from-sky-500 to-indigo-500 rounded-lg z-0" />}
+                      <div className="relative z-10 flex items-center gap-1.5 md:gap-2">
+                        <status.icon className="w-4 h-4 md:w-5 md:h-5" />
+                        <span className="truncate">{status.label}</span>
+                        <span className="bg-slate-900/50 text-white text-xs md:text-base font-bold px-2 py-0.5 rounded-full">{status.count}</span>
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+
+                {filterStatus === 'programado' && (
+                  <div className="mt-4 glass-effect rounded-xl p-1 flex items-center gap-1 flex-wrap">
+                    {cabineFilterOptions.map(cab => (
+                       <motion.button key={cab} layout onClick={() => setCabineFilter(cab)} className={`relative flex-1 px-3 py-2 rounded-lg font-semibold transition-colors text-sm min-w-[80px] ${cabineFilter === cab ? '' : 'text-slate-300 hover:text-white'}`}>
+                        {cabineFilter === cab && <motion.div layoutId="active-cabine-pill" className="absolute inset-0 bg-slate-700/80 rounded-lg z-0" />}
+                        <span className="relative z-10">{cab === 'all' ? 'Todas' : `Cab. ${cab}`}</span>
+                       </motion.button>
+                    ))}
+                  </div>
                 )}
+              </motion.header>
+              
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                <AnimatePresence mode="wait">
+                  <motion.div key={filterStatus}>
+                    {lotes.length === 0 && searchTerm === '' ? (
+                      <div className="text-center p-12 glass-effect rounded-2xl"><Package className="w-16 h-16 mx-auto mb-4 text-slate-500 animate-pulse" /><h3 className="text-2xl font-bold mb-2">Carregando lotes...</h3><p className="text-slate-400">Só um momento, estamos buscando os dados.</p></div>
+                    ) : currentLotes.length === 0 ? (
+                      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-effect p-12 rounded-2xl text-center"><Package className="w-16 h-16 mx-auto mb-4 text-slate-500" /><h3 className="text-2xl font-bold mb-2">Nenhum lote encontrado</h3><p className="text-slate-400 mb-6">Tente ajustar os filtros ou adicione um novo lote.</p><motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleOpenAddModal} className="bg-gradient-to-r from-sky-500 to-indigo-500 px-8 py-3 rounded-xl font-semibold inline-flex items-center gap-2 shadow-lg shadow-sky-500/30"><Plus className="w-5 h-5" />Adicionar Lote</motion.button></motion.div>
+                    ) : (
+                      <Droppable droppableId={`cabine-${cabineFilter}`} isDropDisabled={filterStatus !== 'programado' || cabineFilter === 'all'}>
+                        {(provided) => (
+                          <div ref={provided.innerRef} {...provided.droppableProps} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-start">
+                              {currentLotes.sort((a,b) => (a.ordem_pintura ?? 999) - (b.ordem_pintura ?? 999)).map((lote, index) => (
+                                <Draggable key={lote.id} draggableId={lote.id.toString()} index={index} isDragDisabled={filterStatus !== 'programado' || cabineFilter === 'all'}>
+                                  {(provided) => (
+                                    <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                                      <LoteCard 
+                                        lote={lote} 
+                                        userRole={userRole} 
+                                        onUpdateStatus={handleUpdateLoteStatus} 
+                                        onMarcarEntregue={handleMarcarEntregue} 
+                                        onDelete={handleDeleteLote} 
+                                        onEdit={handleOpenEditModal} 
+                                        onRegisterFinance={() => {}} // Legacy prop handled inside LoteCard or removed, but passing stub to prevent crashes
+                                      />
+                                    </div>
+                                  )}
+                                </Draggable>
+                              ))}
+                            {provided.placeholder}
+                          </div>
+                        )}
+                      </Droppable>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
               </motion.div>
-            </AnimatePresence>
-          </motion.div>
-        </div>
+            </div>
+          </div>
+        )}
 
         <Suspense fallback={<LoadingFallback />}>
           <AddLoteModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSave={handleAddOrUpdateLote} loteToEdit={editingLote} userRole={userRole} />

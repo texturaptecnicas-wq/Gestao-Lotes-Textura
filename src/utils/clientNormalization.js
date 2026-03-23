@@ -1,4 +1,3 @@
-
 export const normalizeClientName = (name) => {
   if (!name) return '';
   return name

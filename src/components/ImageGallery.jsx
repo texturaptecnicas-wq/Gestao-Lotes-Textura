@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { X, Maximize2, ZoomIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';

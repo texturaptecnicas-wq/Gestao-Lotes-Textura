@@ -1,4 +1,3 @@
-
 export const CABIN_COLORS = {
   1: { hex: '#3B82F6', twClass: 'text-blue-400 bg-blue-500/20 border-blue-500/30' },
   2: { hex: '#10B981', twClass: 'text-emerald-400 bg-emerald-500/20 border-emerald-500/30' },

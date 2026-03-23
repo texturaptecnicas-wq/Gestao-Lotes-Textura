@@ -1,4 +1,3 @@
-
 export const getMonday = (d) => {
   const date = new Date(d);
   const day = date.getDay();

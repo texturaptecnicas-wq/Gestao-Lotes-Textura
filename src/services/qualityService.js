@@ -1,6 +1,11 @@
-
 import { supabase } from '@/lib/customSupabaseClient';
 import { normalizeClientName } from '@/utils/clientNormalization';
+
+// ============================================================================
+// NOTICE: THIS SERVICE IS COMPLETELY ISOLATED FROM FINANCIAL OPERATIONS.
+// IT ONLY INTERACTS WITH quality_reports, quality_alerts, AND quality_daily_log.
+// NO REFERENCES TO pix_lancados, pix_pendentes, OR pix_records EXIST HERE.
+// ============================================================================
 
 const SIZE_WEIGHTS = {
   'muito_pequena': 0.5,
@@ -74,7 +79,6 @@ export const deactivateAlert = async (alertId) => {
 export const checkAlertTrigger = (lote, alert) => {
   if (!lote || !alert) return false;
   
-  // 1) Case insensitive client match
   const loteClient = lote.cliente ? lote.cliente.trim().toLowerCase() : '';
   const alertClient = alert.client_name ? alert.client_name.trim().toLowerCase() : '';
   const alertNormalized = alert.client_normalized ? alert.client_normalized : '';
@@ -83,15 +87,11 @@ export const checkAlertTrigger = (lote, alert) => {
   const clientMatches = loteNormalized === alertNormalized || loteClient === alertClient;
   if (!clientMatches) return false;
 
-  // 2) Case insensitive color match
   if (alert.cor && alert.cor.trim() !== '') {
     const loteCor = lote.cor ? lote.cor.trim().toLowerCase() : '';
     const alertCor = alert.cor.trim().toLowerCase();
-    
     return loteCor === alertCor;
   }
-  
-  // 3) If alert.cor is null or empty, it triggers for all colors of this client
   return true;
 };
 
@@ -131,7 +131,7 @@ export const deleteDailyLogEntry = async (logId) => {
   return true;
 };
 
-// --- REPORTS & NEW ANALYTICS ---
+// --- REPORTS ---
 
 export const getFilteredLogs = async (startDate, endDate, filters = {}) => {
   let query = supabase
@@ -141,25 +141,16 @@ export const getFilteredLogs = async (startDate, endDate, filters = {}) => {
     .lte('date', endDate)
     .order('date', { ascending: true });
 
-  if (filters.cabines && filters.cabines.length > 0) {
-    query = query.in('cabine', filters.cabines);
-  }
-  if (filters.pintores && filters.pintores.length > 0) {
-    query = query.in('pintor', filters.pintores);
-  }
-  if (filters.clientes && filters.clientes.length > 0) {
-    query = query.in('client_name', filters.clientes);
-  }
-  if (filters.cores && filters.cores.length > 0) {
-    query = query.in('cor', filters.cores);
-  }
+  if (filters.cabines && filters.cabines.length > 0) query = query.in('cabine', filters.cabines);
+  if (filters.pintores && filters.pintores.length > 0) query = query.in('pintor', filters.pintores);
+  if (filters.clientes && filters.clientes.length > 0) query = query.in('client_name', filters.clientes);
+  if (filters.cores && filters.cores.length > 0) query = query.in('cor', filters.cores);
 
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
 };
 
-// Existing
 export const getLogsForPeriod = async (startDate, endDate) => {
   return getFilteredLogs(startDate, endDate, {});
 };
@@ -224,40 +215,6 @@ export const getSolutionsByProblem = (logs) => {
   }));
 };
 
-export const getComparisonWithPreviousPeriod = async (startDate, endDate, filters = {}) => {
-  const currentLogs = await getFilteredLogs(startDate, endDate, filters);
-  
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const diffTime = Math.abs(end - start);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-
-  const prevEnd = new Date(start);
-  prevEnd.setDate(prevEnd.getDate() - 1);
-  const prevStart = new Date(prevEnd);
-  prevStart.setDate(prevStart.getDate() - diffDays + 1);
-
-  const formatD = (d) => d.toISOString().split('T')[0];
-  const prevLogs = await getFilteredLogs(formatD(prevStart), formatD(prevEnd), filters);
-
-  const currentRework = currentLogs.reduce((sum, l) => sum + (parseInt(l.quantidade) || 0), 0);
-  const prevRework = prevLogs.reduce((sum, l) => sum + (parseInt(l.quantidade) || 0), 0);
-
-  let change = 0;
-  if (prevRework > 0) {
-    change = ((currentRework - prevRework) / prevRework) * 100;
-  } else if (currentRework > 0) {
-    change = 100;
-  }
-
-  return {
-    currentRework,
-    prevRework,
-    changePercentage: change,
-    trend: change > 0 ? 'piorando' : (change < 0 ? 'melhorando' : 'estável')
-  };
-};
-
 export const getFilterOptions = async () => {
   const { data, error } = await supabase.from('quality_daily_log').select('cabine, pintor, client_name, cor');
   if (error) throw error;
@@ -270,76 +227,10 @@ export const getFilterOptions = async () => {
   return { cabines, pintores, clientes, cores };
 };
 
-// --- NEWLY RESTORED FUNCTIONS ---
-
-export const transformLogToAlert = async (logEntry, specificColor = null) => {
-  try {
-    let logData = logEntry;
-    
-    if (typeof logEntry === 'string') {
-      const { data, error } = await supabase
-        .from('quality_daily_log')
-        .select('*')
-        .eq('id', logEntry)
-        .single();
-      if (error) throw error;
-      logData = data;
-    }
-
-    const description = `Problema: ${logData.problema || 'N/A'}. Tamanho: ${logData.tamanho_peca || 'N/A'}. Cabine: ${logData.cabine || 'N/A'}. Obs: ${logData.observacoes || ''}`;
-
-    let alertColor = specificColor !== undefined ? specificColor : logData.cor;
-    if (alertColor === '') alertColor = null;
-
-    const alertData = {
-      client_name: logData.client_name || logData.cliente || 'Desconhecido',
-      client_normalized: logData.client_normalized || 'desconhecido',
-      description: description.trim(),
-      image_url: logData.image_url,
-      created_by: logData.pintor || 'Sistema',
-      cor: alertColor || null,
-      active: true
-    };
-
-    const { data: newAlert, error: alertError } = await supabase
-      .from('quality_alerts')
-      .insert([alertData])
-      .select()
-      .single();
-
-    if (alertError) throw alertError;
-    return newAlert;
-  } catch (error) {
-    console.error('Error transforming log to alert:', error);
-    throw error;
-  }
-};
-
-export const getDailyLogByDate = async (date) => {
-  try {
-    const { data, error } = await supabase
-      .from('quality_daily_log')
-      .select('*')
-      .eq('date', date)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data || [];
-  } catch (error) {
-    console.error('Error fetching daily log by date:', error);
-    throw error;
-  }
-};
-
 export const getDailyLogDates = async () => {
   try {
-    const { data, error } = await supabase
-      .from('quality_daily_log')
-      .select('date')
-      .order('date', { ascending: false });
-    
+    const { data, error } = await supabase.from('quality_daily_log').select('date').order('date', { ascending: false });
     if (error) throw error;
-    
     const uniqueDates = [...new Set(data.map(d => d.date))];
     return uniqueDates;
   } catch (error) {
@@ -348,121 +239,125 @@ export const getDailyLogDates = async () => {
   }
 };
 
-export const uploadAlertImage = async (file, alertId = 'new') => {
-  try {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-    const filePath = `${alertId}/${fileName}`;
+// ============================================================================
+// NEW FUNCTIONS RESTORED
+// ============================================================================
 
+export const getDailyLogByDate = async (date) => {
+  if (!date) return [];
+  try {
+    const { data, error } = await supabase
+      .from('quality_daily_log')
+      .select('*')
+      .eq('date', date)
+      .order('created_at', { ascending: false });
+      
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error in getDailyLogByDate:', error);
+    return [];
+  }
+};
+
+export const uploadAlertImage = async (file) => {
+  if (!file) throw new Error('Nenhum arquivo fornecido.');
+  if (!file.type.startsWith('image/')) throw new Error('O arquivo deve ser uma imagem.');
+
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${crypto.randomUUID()}.${fileExt}`;
+
+  try {
     const { error: uploadError } = await supabase.storage
       .from('alerts')
-      .upload(filePath, file);
+      .upload(fileName, file);
 
     if (uploadError) throw uploadError;
 
-    const { data } = supabase.storage.from('alerts').getPublicUrl(filePath);
+    const { data } = supabase.storage
+      .from('alerts')
+      .getPublicUrl(fileName);
+
     return data.publicUrl;
   } catch (error) {
-    console.error('Error uploading alert image:', error);
-    throw error;
+    console.error('Error uploading image:', error);
+    throw new Error('Falha ao fazer upload da imagem.');
   }
 };
 
-export const getWeightedMetricsForAllCabines = async (startDate, endDate) => {
+export const getWeightedMetricsForAllCabines = async (startOrRange, endStr) => {
+  let startDate, endDate;
+  
+  if (typeof startOrRange === 'object' && startOrRange !== null) {
+    startDate = startOrRange.startDate || startOrRange.start;
+    endDate = startOrRange.endDate || startOrRange.end;
+  } else {
+    startDate = startOrRange;
+    endDate = endStr;
+  }
+
+  if (!startDate || !endDate) return [];
+  
   try {
-    const logs = await getFilteredLogs(startDate, endDate, {});
-    
-    const grouped = logs.reduce((acc, log) => {
-      const cab = log.cabine || 'N/A';
-      if (!acc[cab]) {
-        acc[cab] = {
+    const { data: logs, error } = await supabase
+      .from('quality_daily_log')
+      .select('*')
+      .gte('date', startDate)
+      .lte('date', endDate);
+
+    if (error) throw error;
+    if (!logs || logs.length === 0) return [];
+
+    const cabineMap = {};
+
+    logs.forEach(log => {
+      const cab = log.cabine || 'Sem Cabine';
+      if (!cabineMap[cab]) {
+        cabineMap[cab] = {
           cabine: cab,
-          weightedRework: 0,
+          logs: [],
           rawRework: 0,
+          weightedRework: 0,
           problems: {},
           painters: {},
-          logs: []
+          total_records: 0,
+          problem_frequency: {},
+          defect_rate: 0,
+          rework_rate: 0,
+          severity_average: 0
         };
       }
-      
+
       const qty = parseInt(log.quantidade) || 0;
       const weight = getRecordWeight(log.tamanho_peca);
       
-      acc[cab].rawRework += qty;
-      acc[cab].weightedRework += (qty * weight);
-      acc[cab].logs.push(log);
-      
-      const prob = log.problema || 'N/A';
-      if (!acc[cab].problems[prob]) acc[cab].problems[prob] = 0;
-      acc[cab].problems[prob] += qty;
-      
-      const painter = log.pintor || 'N/A';
-      if (!acc[cab].painters[painter]) acc[cab].painters[painter] = 0;
-      acc[cab].painters[painter] += qty;
-      
-      return acc;
-    }, {});
-    
-    return Object.values(grouped);
-  } catch (error) {
-    console.error('Error calculating weighted metrics for cabines:', error);
-    throw error;
-  }
-};
+      const cabData = cabineMap[cab];
+      cabData.logs.push(log);
+      cabData.rawRework += qty;
+      cabData.weightedRework += (qty * weight);
+      cabData.total_records += 1;
 
-export const getQualityReport = async (periodType, startDate, endDate) => {
-  try {
-    const { data } = await supabase
-      .from('quality_reports')
-      .select('*')
-      .eq('period_type', periodType)
-      .eq('period_start', startDate)
-      .eq('period_end', endDate)
-      .maybeSingle();
-    return data;
-  } catch (error) {
-    console.error('Error fetching quality report:', error);
-    return null;
-  }
-};
+      const prob = log.problema || 'Não Informado';
+      cabData.problems[prob] = (cabData.problems[prob] || 0) + qty;
+      cabData.problem_frequency[prob] = cabData.problems[prob];
 
-export const saveQualityReport = async (reportData) => {
-  try {
-    const { data, error } = await supabase
-      .from('quality_reports')
-      .upsert([reportData])
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Error saving quality report:', error);
-    throw error;
-  }
-};
+      const pintor = log.pintor || 'Não Informado';
+      cabData.painters[pintor] = (cabData.painters[pintor] || 0) + qty;
+    });
 
-export const calculateMetricAggregations = (logs) => {
-  const aggregations = { clients: {}, colors: {}, painters: {}, problems: {}, sizes: {} };
-  
-  logs.forEach(log => {
-    const qty = parseInt(log.quantidade) || 0;
-    
-    if (log.client_name) {
-      aggregations.clients[log.client_name] = (aggregations.clients[log.client_name] || 0) + qty;
-    }
-    if (log.cor) {
-      aggregations.colors[log.cor] = (aggregations.colors[log.cor] || 0) + qty;
-    }
-    if (log.pintor) {
-      aggregations.painters[log.pintor] = (aggregations.painters[log.pintor] || 0) + qty;
-    }
-    if (log.problema) {
-      aggregations.problems[log.problema] = (aggregations.problems[log.problema] || 0) + qty;
-    }
-    if (log.tamanho_peca) {
-      aggregations.sizes[log.tamanho_peca] = (aggregations.sizes[log.tamanho_peca] || 0) + qty;
-    }
-  });
-  
-  return { aggregations };
+    return Object.values(cabineMap).map(cab => {
+       cab.defect_rate = cab.total_records > 0 ? (cab.logs.filter(l => l.problema).length / cab.total_records) * 100 : 0;
+       cab.rework_rate = cab.total_records > 0 ? (cab.logs.filter(l => (parseInt(l.quantidade) || 0) > 0).length / cab.total_records) * 100 : 0;
+       cab.severity_average = cab.total_records > 0 ? (cab.weightedRework / cab.total_records) : 0;
+       return cab;
+    }).sort((a, b) => {
+       if (a.cabine === 'Sem Cabine') return 1;
+       if (b.cabine === 'Sem Cabine') return -1;
+       return String(a.cabine).localeCompare(String(b.cabine), undefined, {numeric: true});
+    });
+
+  } catch (error) {
+    console.error('Error fetching cabine metrics:', error);
+    return [];
+  }
 };

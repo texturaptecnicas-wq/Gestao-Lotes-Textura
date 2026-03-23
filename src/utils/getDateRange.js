@@ -1,4 +1,3 @@
-
 export const getNextDay = (dateString) => {
   if (!dateString) return null;
   const [year, month, day] = dateString.split('-');

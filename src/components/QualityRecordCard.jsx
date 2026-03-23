@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { AlertTriangle, User, Palette, Package, CheckCircle, Edit, Trash2, Clock, Factory, Maximize2 } from 'lucide-react';
 import ImageGallery from './ImageGallery';

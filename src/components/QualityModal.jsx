@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, CheckCircle, Plus, Loader2, ListTodo, ShieldAlert, Camera, UploadCloud, Trash2, PieChart, Maximize, Minimize } from 'lucide-react';
@@ -9,7 +8,6 @@ import QualityReports from './QualityReports';
 import AlertBadge from './AlertBadge';
 import EditAlertModal from './EditAlertModal';
 import { useFullscreen } from '@/hooks/useFullscreen';
-
 const QualityModal = ({
   isOpen,
   onClose,
@@ -29,18 +27,18 @@ const QualityModal = ({
   const [previewUrl, setPreviewUrl] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(false);
   const [editingAlert, setEditingAlert] = useState(null);
-  
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
-
-  const { isFullscreen, toggleFullscreen, elementRef } = useFullscreen();
-
+  const {
+    isFullscreen,
+    toggleFullscreen,
+    elementRef
+  } = useFullscreen();
   useEffect(() => {
     if (isOpen && activeTab === 'alertas') {
       fetchAlerts();
     }
   }, [isOpen, activeTab]);
-
   const fetchAlerts = async () => {
     setLoading(true);
     try {
@@ -56,7 +54,6 @@ const QualityModal = ({
       setLoading(false);
     }
   };
-
   const handleDeactivate = async id => {
     try {
       await deactivateAlert(id);
@@ -73,7 +70,6 @@ const QualityModal = ({
       });
     }
   };
-
   const handleFileChange = e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -96,7 +92,6 @@ const QualityModal = ({
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
   };
-
   const removeSelectedFile = () => {
     setSelectedFile(null);
     if (previewUrl) {
@@ -106,7 +101,6 @@ const QualityModal = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
-
   const handleSubmit = async e => {
     e.preventDefault();
     if (!formData.client_name.trim()) {
@@ -166,20 +160,33 @@ const QualityModal = ({
       setUploadProgress(false);
     }
   };
-
   if (!isOpen) return null;
   const isAdmin = userRole === 'administrador';
-
   return <AnimatePresence>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className={`fixed inset-0 z-[100] flex items-center justify-center ${isFullscreen ? 'p-0' : 'p-4 bg-black/70 backdrop-blur-sm'}`}>
-        <motion.div 
-          ref={elementRef}
-          initial={isFullscreen ? {} : { scale: 0.9, opacity: 0, y: 20 }} 
-          animate={isFullscreen ? { scale: 1, opacity: 1, y: 0 } : { scale: 1, opacity: 1, y: 0 }} 
-          exit={isFullscreen ? {} : { scale: 0.9, opacity: 0, y: 20 }} 
-          onClick={e => e.stopPropagation()} 
-          className={`glass-effect w-full flex flex-col relative overflow-hidden bg-slate-900 border border-slate-800 ${isFullscreen ? 'h-full rounded-none border-none' : 'max-w-6xl h-[90vh] rounded-2xl'}`}
-        >
+      <motion.div initial={{
+      opacity: 0
+    }} animate={{
+      opacity: 1
+    }} exit={{
+      opacity: 0
+    }} onClick={onClose} className={`fixed inset-0 z-[100] flex items-center justify-center ${isFullscreen ? 'p-0' : 'p-4 bg-black/70 backdrop-blur-sm'}`}>
+        <motion.div ref={elementRef} initial={isFullscreen ? {} : {
+        scale: 0.9,
+        opacity: 0,
+        y: 20
+      }} animate={isFullscreen ? {
+        scale: 1,
+        opacity: 1,
+        y: 0
+      } : {
+        scale: 1,
+        opacity: 1,
+        y: 0
+      }} exit={isFullscreen ? {} : {
+        scale: 0.9,
+        opacity: 0,
+        y: 20
+      }} onClick={e => e.stopPropagation()} className={`glass-effect w-full flex flex-col relative overflow-hidden bg-slate-900 border border-slate-800 ${isFullscreen ? 'h-full rounded-none border-none' : 'max-w-6xl h-[90vh] rounded-2xl'}`}>
           <div className="flex flex-col border-b border-slate-800 bg-slate-900/80">
             <div className="flex items-center justify-between p-4 px-6">
               <div className="flex items-center gap-3">
@@ -189,14 +196,21 @@ const QualityModal = ({
                 <h2 className="text-2xl font-bold text-white">Controle de Qualidade</h2>
               </div>
               <div className="flex items-center gap-2">
-                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={toggleFullscreen} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400" title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}>
+                <motion.button whileHover={{
+                scale: 1.1
+              }} whileTap={{
+                scale: 0.9
+              }} onClick={toggleFullscreen} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400" title={isFullscreen ? "Sair da Tela Cheia" : "Tela Cheia"}>
                   {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
                 </motion.button>
-                {!isFullscreen && (
-                  <motion.button whileHover={{ scale: 1.1, rotate: 90 }} whileTap={{ scale: 0.9 }} onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400">
+                {!isFullscreen && <motion.button whileHover={{
+                scale: 1.1,
+                rotate: 90
+              }} whileTap={{
+                scale: 0.9
+              }} onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400">
                     <X className="w-5 h-5" />
-                  </motion.button>
-                )}
+                  </motion.button>}
               </div>
             </div>
             
@@ -208,14 +222,23 @@ const QualityModal = ({
                   <ListTodo className="w-4 h-4" /> Registro Diário
                 </button>
                 <button onClick={() => setActiveTab('relatorios')} className={`px-4 py-2.5 rounded-t-lg font-semibold flex items-center gap-2 transition-colors border-b-2 whitespace-nowrap ${activeTab === 'relatorios' ? 'bg-slate-800/50 text-white border-emerald-500' : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-slate-800/30'}`}>
-                  <PieChart className="w-4 h-4" /> Relatórios
+                  <PieChart className="w-4 h-4" /> Relatórios Retrabalho
                 </button>
             </div>
           </div>
 
           <div className="flex-grow overflow-hidden relative">
              <AnimatePresence mode="wait">
-               {activeTab === 'alertas' && <motion.div key="tab-alertas" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="absolute inset-0 flex flex-col md:flex-row overflow-hidden">
+               {activeTab === 'alertas' && <motion.div key="tab-alertas" initial={{
+              opacity: 0,
+              x: -20
+            }} animate={{
+              opacity: 1,
+              x: 0
+            }} exit={{
+              opacity: 0,
+              x: 20
+            }} className="absolute inset-0 flex flex-col md:flex-row overflow-hidden">
                     <div className="w-full md:w-1/3 p-6 border-r border-slate-800 bg-slate-900/30 overflow-y-auto custom-scrollbar">
                       <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                         <Plus className="w-5 h-5 text-amber-500" />
@@ -224,23 +247,26 @@ const QualityModal = ({
                       <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
                           <label className="block text-sm font-medium text-slate-400 mb-1">Cliente *</label>
-                          <input type="text" value={formData.client_name} onChange={e => setFormData({ ...formData, client_name: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm" placeholder="Nome do cliente" />
+                          <input type="text" value={formData.client_name} onChange={e => setFormData({
+                      ...formData,
+                      client_name: e.target.value
+                    })} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm" placeholder="Nome do cliente" />
                         </div>
                         
                         <div>
                           <label className="block text-sm font-medium text-slate-400 mb-1">Cor (Opcional)</label>
-                          <input
-                            type="text"
-                            value={formData.cor}
-                            onChange={e => setFormData({ ...formData, cor: e.target.value })}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm"
-                            placeholder="Ex: Branco, Preto (Vazio = qualquer cor)"
-                          />
+                          <input type="text" value={formData.cor} onChange={e => setFormData({
+                      ...formData,
+                      cor: e.target.value
+                    })} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm" placeholder="Ex: Branco, Preto (Vazio = qualquer cor)" />
                         </div>
 
                         <div>
                           <label className="block text-sm font-medium text-slate-400 mb-1">Descrição</label>
-                          <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm min-h-[100px]" placeholder="Detalhes críticos sobre qualidade, atenção especial..." />
+                          <textarea value={formData.description} onChange={e => setFormData({
+                      ...formData,
+                      description: e.target.value
+                    })} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm min-h-[100px]" placeholder="Detalhes críticos sobre qualidade, atenção especial..." />
                         </div>
 
                         <div className="space-y-2">
@@ -270,7 +296,10 @@ const QualityModal = ({
                         
                         <div className="pt-2">
                           <label className="block text-xs font-medium text-slate-500 mb-1">Ou informe uma URL</label>
-                          <input type="url" value={formData.image_url} onChange={e => setFormData({ ...formData, image_url: e.target.value })} disabled={!!selectedFile} className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2 text-slate-400 focus:ring-1 focus:ring-amber-500 text-xs disabled:opacity-50" placeholder="https://..." />
+                          <input type="url" value={formData.image_url} onChange={e => setFormData({
+                      ...formData,
+                      image_url: e.target.value
+                    })} disabled={!!selectedFile} className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-3 py-2 text-slate-400 focus:ring-1 focus:ring-amber-500 text-xs disabled:opacity-50" placeholder="https://..." />
                         </div>
 
                         <button type="submit" disabled={submitting} className="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors mt-4 shadow-lg shadow-amber-500/20">
@@ -292,41 +321,42 @@ const QualityModal = ({
                           <CheckCircle className="w-10 h-10 text-emerald-500/50 mb-2" />
                           <p>Nenhum alerta de qualidade ativo.</p>
                         </div> : <div className="space-y-4">
-                          {alerts.map(alert => (
-                            <AlertBadge 
-                              key={alert.id} 
-                              alert={alert} 
-                              isAdmin={isAdmin} 
-                              onDeactivate={handleDeactivate} 
-                              onEdit={(a) => setEditingAlert(a)}
-                              isModal={true} 
-                            />
-                          ))}
+                          {alerts.map(alert => <AlertBadge key={alert.id} alert={alert} isAdmin={isAdmin} onDeactivate={handleDeactivate} onEdit={a => setEditingAlert(a)} isModal={true} />)}
                         </div>}
                     </div>
                  </motion.div>}
 
-               {activeTab === 'diario' && <motion.div key="tab-diario" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="absolute inset-0 p-6 overflow-hidden">
+               {activeTab === 'diario' && <motion.div key="tab-diario" initial={{
+              opacity: 0,
+              scale: 0.98
+            }} animate={{
+              opacity: 1,
+              scale: 1
+            }} exit={{
+              opacity: 0,
+              scale: 0.98
+            }} className="absolute inset-0 p-6 overflow-hidden">
                      <QualityDailyLog userRole={userRole} />
                   </motion.div>}
                
-               {activeTab === 'relatorios' && <motion.div key="tab-relatorios" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="absolute inset-0 overflow-hidden">
+               {activeTab === 'relatorios' && <motion.div key="tab-relatorios" initial={{
+              opacity: 0,
+              x: 20
+            }} animate={{
+              opacity: 1,
+              x: 0
+            }} exit={{
+              opacity: 0,
+              x: -20
+            }} className="absolute inset-0 overflow-hidden">
                      <QualityReports />
                   </motion.div>}
              </AnimatePresence>
           </div>
         </motion.div>
         
-        {editingAlert && (
-          <EditAlertModal 
-            isOpen={true} 
-            alert={editingAlert} 
-            onClose={() => setEditingAlert(null)} 
-            onUpdateSuccess={fetchAlerts} 
-          />
-        )}
+        {editingAlert && <EditAlertModal isOpen={true} alert={editingAlert} onClose={() => setEditingAlert(null)} onUpdateSuccess={fetchAlerts} />}
       </motion.div>
     </AnimatePresence>;
 };
-
 export default QualityModal;

@@ -1,4 +1,3 @@
-
 import { AlignJustify, Box, Maximize, Maximize2, Scaling } from 'lucide-react';
 
 export const PIECE_SIZES = [

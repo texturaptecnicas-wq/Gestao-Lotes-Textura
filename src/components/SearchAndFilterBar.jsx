@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Search, FilterX } from 'lucide-react';
 import { PIECE_SIZES } from '@/utils/pieceSizeConfig';

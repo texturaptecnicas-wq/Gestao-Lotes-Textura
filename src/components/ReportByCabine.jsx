@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, RefreshCw, Loader2, Factory, TrendingDown, AlertTriangle, User, ShieldAlert } from 'lucide-react';

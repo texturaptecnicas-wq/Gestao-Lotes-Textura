@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle } from 'lucide-react';

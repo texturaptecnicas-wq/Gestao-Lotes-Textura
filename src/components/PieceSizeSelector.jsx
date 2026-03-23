@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { PIECE_SIZES } from '@/utils/pieceSizeConfig';
 import { cn } from '@/lib/utils';
