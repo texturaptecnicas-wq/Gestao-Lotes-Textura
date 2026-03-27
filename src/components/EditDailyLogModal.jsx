@@ -1,183 +1,202 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader2, Save, Calendar } from 'lucide-react';
-import { updateDailyLogEntry, createDailyLogEntry } from '@/services/qualityService';
-import { toast } from '@/components/ui/use-toast';
-import PieceSizeSelector from './PieceSizeSelector';
 
-const getLocalToday = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-};
+import React, { useState, useEffect } from 'react';
+import { X, Save, Loader2, ShieldCheck } from 'lucide-react';
+import { toast } from '@/components/ui/use-toast';
+import { createDailyLogEntry, updateDailyLogEntry } from '@/services/qualityService';
 
 const EditDailyLogModal = ({ isOpen, onClose, logData, onSaved }) => {
-  const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false);
-  const today = getLocalToday();
+  const [formData, setFormData] = useState({
+    date: '',
+    cabine: 1,
+    client_name: '',
+    cor: '',
+    pintor: '',
+    problema: '',
+    quantidade: 1,
+    tamanho_peca: 'media',
+    observacoes: '',
+    isZeroRework: false
+  });
 
   useEffect(() => {
-    if (logData) {
+    if (isOpen && logData) {
+      const isZero = logData.isZeroRework || logData.quantidade === 0 || logData.client_name === 'SEM RETRABALHO';
       setFormData({
-        isNew: logData.isNew || false,
-        date: logData.date || today,
-        client_name: logData.client_name || '',
+        date: logData.date || '',
+        cabine: logData.cabine || 1,
+        client_name: isZero ? 'SEM RETRABALHO' : (logData.client_name || logData.cliente || ''),
         cor: logData.cor || '',
         pintor: logData.pintor || '',
-        quantidade: logData.quantidade || '',
-        problema: logData.problema || '',
-        analysis_conclusion: logData.analysis_conclusion || '',
-        cabine: logData.cabine || 1,
-        tamanho_peca: logData.tamanho_peca || null
+        problema: isZero ? 'Nenhum' : (logData.problema || logData.sintoma || ''),
+        quantidade: isZero ? 0 : (logData.quantidade || 1),
+        tamanho_peca: logData.tamanho_peca || 'media',
+        observacoes: logData.observacoes || '',
+        isZeroRework: isZero
       });
     }
-  }, [logData, today]);
+  }, [isOpen, logData]);
 
-  if (!isOpen || !logData) return null;
+  if (!isOpen) return null;
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({ 
+      ...prev, 
+      [name]: type === 'checkbox' ? checked : value 
+    }));
   };
 
-  const handleSizeChange = (sizeValue) => {
-    setFormData(prev => ({ ...prev, tamanho_peca: sizeValue }));
+  const handleZeroReworkToggle = (checked) => {
+    setFormData(prev => ({
+      ...prev,
+      isZeroRework: checked,
+      client_name: checked ? 'SEM RETRABALHO' : '',
+      quantidade: checked ? 0 : 1,
+      problema: checked ? 'Nenhum' : '',
+      cabine: checked ? '' : prev.cabine,
+      cor: checked ? '' : prev.cor,
+      pintor: checked ? '' : prev.pintor,
+      tamanho_peca: checked ? '' : prev.tamanho_peca
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validate future dates
-    if (formData.date > today) {
-      toast({ 
-        title: "Data Inválida", 
-        description: "Não é permitido usar datas futuras para registros diários.", 
-        variant: "destructive" 
-      });
-      return;
-    }
-
     setLoading(true);
     try {
-      let savedLog;
-      if (formData.isNew) {
-        const { isNew, ...submitData } = formData;
-        savedLog = await createDailyLogEntry(submitData);
-        toast({ title: "Sucesso", description: "Registro criado com sucesso." });
-      } else {
-        const { isNew, ...submitData } = formData;
-        savedLog = await updateDailyLogEntry(logData.id, submitData);
-        toast({ title: "Sucesso", description: "Registro atualizado com sucesso." });
+      const payload = { ...formData };
+      if (payload.isZeroRework) {
+        payload.client_name = 'SEM RETRABALHO';
+        payload.quantidade = 0;
+        payload.problema = 'Nenhum';
+        payload.cabine = null;
+        payload.cor = null;
+        payload.pintor = null;
+        payload.tamanho_peca = null;
       }
-      onSaved(savedLog, formData.isNew);
+      
+      let saved;
+      if (logData.isNew) {
+        saved = await createDailyLogEntry(payload);
+        toast({ title: 'Sucesso', description: payload.isZeroRework ? 'Dia sem retrabalho registrado.' : 'Registro salvo com sucesso.' });
+      } else {
+        saved = await updateDailyLogEntry(logData.id, payload);
+        toast({ title: 'Sucesso', description: 'Registro atualizado.' });
+      }
+      onSaved(saved, logData.isNew);
       onClose();
     } catch (error) {
-      toast({ title: "Erro", description: "Falha ao salvar o registro.", variant: "destructive" });
+      console.error(error);
+      toast({ title: 'Erro', description: 'Falha ao salvar. Verifique se preencheu todos os campos.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }}
-          onClick={(e) => e.stopPropagation()}
-          className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-        >
-          <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-800/50 shrink-0">
-            <h3 className="text-lg font-bold text-white">
-              {formData.isNew ? 'Novo Registro Diário' : 'Editar Registro'}
-            </h3>
-            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">
-              <X className="w-5 h-5" />
-            </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-900/50 shrink-0">
+          <h2 className="text-xl font-bold text-white">
+            {logData?.isNew ? 'Novo Registro' : 'Editar Registro'}
+          </h2>
+          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form id="editDailyLogForm" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar space-y-5">
+          
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex items-center gap-3 transition-colors hover:bg-emerald-500/20">
+            <input 
+              type="checkbox" 
+              id="zeroRework"
+              className="w-5 h-5 rounded border-emerald-500 text-emerald-500 focus:ring-emerald-500 bg-slate-900 cursor-pointer"
+              checked={formData.isZeroRework}
+              onChange={(e) => handleZeroReworkToggle(e.target.checked)}
+            />
+            <label htmlFor="zeroRework" className="text-emerald-400 font-bold text-base cursor-pointer flex-1 select-none flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5" /> Nenhum retrabalho hoje (Dia Limpo)
+            </label>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1">
-            
-            {/* Dynamic Date Selection prominent in the form */}
-            <div className={`p-4 rounded-xl border flex items-center justify-between ${formData.date > today ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700'}`}>
-              <div>
-                <label className="block text-sm font-semibold text-slate-300 mb-1 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-sky-400" /> Data do Retrabalho
-                </label>
-                <input 
-                  type="date" 
-                  name="date" 
-                  max={today}
-                  style={{ colorScheme: 'dark' }}
-                  value={formData.date || today} 
-                  onChange={handleChange} 
-                  className="bg-slate-950 border border-slate-600 rounded-lg px-3 py-2 text-sm text-sky-400 font-bold focus:ring-2 focus:ring-sky-500" 
-                />
-              </div>
-              {formData.date > today && (
-                <span className="text-xs text-red-400 font-bold max-w-[120px] text-right leading-tight">
-                  Data futura não permitida
-                </span>
-              )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-300">Data *</label>
+              <input type="date" name="date" required value={formData.date} onChange={handleChange} style={{ colorScheme: 'dark' }} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Cliente</label>
-                <input type="text" name="client_name" value={formData.client_name} onChange={handleChange} required className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-sky-500" />
+            {!formData.isZeroRework && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-300">Quantidade de Peças *</label>
+                <input type="number" min="1" name="quantidade" required value={formData.quantidade} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all" />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Cabine</label>
-                <select name="cabine" value={formData.cabine} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-sky-500">
-                  {[1,2,3,4].map(c => <option key={c} value={c}>Cabine {c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Cor</label>
-                <input type="text" name="cor" value={formData.cor} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-sky-500" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Pintor</label>
-                <input type="text" name="pintor" value={formData.pintor} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-sky-500" />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-slate-400 mb-1">Quantidade</label>
-                <input type="number" name="quantidade" min="1" value={formData.quantidade} onChange={handleChange} required className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-sky-500" />
-              </div>
-            </div>
+            )}
+          </div>
 
-            <PieceSizeSelector 
-              selectedSize={formData.tamanho_peca} 
-              onSizeChange={handleSizeChange} 
-            />
+          {!formData.isZeroRework && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-300">Cliente *</label>
+                  <input type="text" name="client_name" required={!formData.isZeroRework} value={formData.client_name} onChange={handleChange} placeholder="Nome do cliente" className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-300">Cor</label>
+                  <input type="text" name="cor" value={formData.cor} onChange={handleChange} placeholder="Ex: Preto Ninja" className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all" />
+                </div>
+              </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Problema / Sintoma</label>
-              <input type="text" name="problema" value={formData.problema} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-sky-500" />
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-300">Problema / Sintoma *</label>
+                  <input type="text" name="problema" required={!formData.isZeroRework} value={formData.problema} onChange={handleChange} placeholder="Ex: Fervura, Contaminação" className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-300">Tamanho da Peça</label>
+                  <select name="tamanho_peca" value={formData.tamanho_peca} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all">
+                    <option value="">Selecione...</option>
+                    <option value="muito_pequena">Muito Pequena (Peso 0.5x)</option>
+                    <option value="pequena">Pequena (Peso 1.0x)</option>
+                    <option value="media">Média (Peso 1.5x)</option>
+                    <option value="grande">Grande (Peso 2.0x)</option>
+                    <option value="muito_grande">Muito Grande (Peso 3.0x)</option>
+                  </select>
+                </div>
+              </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">Conclusão / Ação</label>
-              <textarea name="analysis_conclusion" value={formData.analysis_conclusion} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-1 focus:ring-sky-500 min-h-[80px] resize-y" />
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-300">Pintor</label>
+                  <input type="text" name="pintor" value={formData.pintor} onChange={handleChange} placeholder="Nome do pintor" className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-semibold text-slate-300">Cabine</label>
+                  <input type="number" min="1" name="cabine" value={formData.cabine} onChange={handleChange} className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all" />
+                </div>
+              </div>
+            </>
+          )}
 
-            <div className="pt-4 flex justify-end gap-3 border-t border-slate-800">
-              <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors">Cancelar</button>
-              <button 
-                type="submit" 
-                disabled={loading || formData.date > today} 
-                className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {formData.isNew ? 'Salvar Novo Registro' : 'Salvar Alterações'}
-              </button>
-            </div>
-          </form>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-300">Observações {formData.isZeroRework ? '(Opcional)' : ''}</label>
+            <textarea name="observacoes" value={formData.observacoes} onChange={handleChange} rows="3" placeholder="Detalhes adicionais..." className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:ring-2 focus:ring-sky-500 outline-none transition-all resize-none"></textarea>
+          </div>
+
+        </form>
+
+        <div className="p-4 border-t border-slate-800 bg-slate-900/50 flex justify-end gap-3 shrink-0">
+          <button type="button" onClick={onClose} disabled={loading} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors font-medium">
+            Cancelar
+          </button>
+          <button type="submit" form="editDailyLogForm" disabled={loading} className="px-6 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition-colors font-medium flex items-center gap-2 shadow-lg shadow-sky-500/20">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+            {loading ? 'Salvando...' : 'Salvar Registro'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
-import { Calendar, Filter, X } from 'lucide-react';
+import { Calendar, Filter, X, BarChart3 } from 'lucide-react';
 import { getDateRange } from '@/utils/getDateRange';
 
-const ReportFilters = ({ onFilterChange, filterOptions }) => {
+const ReportFilters = ({ onFilterChange, filterOptions, onCompareOpen, currentFilters }) => {
   const [activePeriod, setActivePeriod] = useState('month');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -14,6 +15,16 @@ const ReportFilters = ({ onFilterChange, filterOptions }) => {
     handlePeriodSelect('month');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sync local state with currentFilters passed from parent
+  useEffect(() => {
+    if (currentFilters) {
+      if (currentFilters.cabines) setSelectedCabines(currentFilters.cabines);
+      if (currentFilters.pintores) setSelectedPintores(currentFilters.pintores);
+      if (currentFilters.startDate) setCustomStart(currentFilters.startDate);
+      if (currentFilters.endDate) setCustomEnd(currentFilters.endDate);
+    }
+  }, [currentFilters]);
 
   const handlePeriodSelect = (type) => {
     setActivePeriod(type);
@@ -127,12 +138,22 @@ const ReportFilters = ({ onFilterChange, filterOptions }) => {
 
         {/* Actions */}
         <div className="flex flex-col justify-end gap-2 min-w-[140px]">
-          <button onClick={clearFilters} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2">
-            <X className="w-4 h-4" /> Limpar
-          </button>
-          <button onClick={applyFilters} className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-semibold transition-colors shadow-lg shadow-sky-500/20">
-            Aplicar Filtros
-          </button>
+          {onCompareOpen && (
+            <button 
+              onClick={onCompareOpen} 
+              className="px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 hover:text-indigo-200 border border-indigo-500/30 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm"
+            >
+              <BarChart3 className="w-4 h-4" /> Comparar
+            </button>
+          )}
+          <div className="flex gap-2 w-full">
+            <button onClick={clearFilters} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1">
+              <X className="w-4 h-4" /> Limpar
+            </button>
+            <button onClick={applyFilters} className="flex-[2] py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-semibold transition-colors shadow-lg shadow-sky-500/20">
+              Aplicar Filtros
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,13 +1,15 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Maximize, Minimize } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getFilteredLogs, getFilterOptions, getReportDataByDateRange, getProblemsFrequency } from '@/services/qualityService';
+import { getFilteredLogs, getFilterOptions, getReportDataByDateRange, getProblemsFrequencyByClient } from '@/services/qualityService';
 import ReportFilters from './ReportFilters';
 import ReportSummary from './ReportSummary';
 import ReportEvolutionChart from './ReportEvolutionChart';
 import ReportProblemsChart from './ReportProblemsChart';
 import ReportSolutionsChart from './ReportSolutionsChart';
 import ReportExport from './ReportExport';
+import ComparisonCabinePainterModal from './ComparisonCabinePainterModal';
 import { getDateRange } from '@/utils/getDateRange';
 import { useFullscreen } from '@/hooks/useFullscreen';
 
@@ -34,18 +36,20 @@ const QualityReports = () => {
     problemsData: []
   });
   
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   const { isFullscreen, toggleFullscreen, elementRef } = useFullscreen();
 
   useEffect(() => {
     getFilterOptions().then(setFilterOptions).catch(console.error);
   }, []);
+
   const fetchDashboardData = useCallback(async filters => {
     setLoading(true);
     try {
       if (!filters.startDate || !filters.endDate) return;
       const logs = await getFilteredLogs(filters.startDate, filters.endDate, filters);
       const evolution = getReportDataByDateRange(logs);
-      const problems = getProblemsFrequency(logs);
+      const problems = getProblemsFrequencyByClient(logs);
 
       // Calculate previous period for trend analysis directly here
       const start = new Date(filters.startDate);
@@ -58,6 +62,7 @@ const QualityReports = () => {
       prevStart.setDate(prevStart.getDate() - diffDays + 1);
       const formatD = d => d.toISOString().split('T')[0];
       const prevLogs = await getFilteredLogs(formatD(prevStart), formatD(prevEnd), filters);
+      
       setReportData({
         logs,
         prevLogs,
@@ -75,20 +80,23 @@ const QualityReports = () => {
       setLoading(false);
     }
   }, []);
+
   useEffect(() => {
     fetchDashboardData(currentFilters);
   }, [currentFilters, fetchDashboardData]);
+
   const handleFilterChange = newFilters => {
     setCurrentFilters(prev => ({
       ...prev,
       ...newFilters
     }));
   };
-  return <div 
+
+  return (
+    <div 
       ref={elementRef}
       className={`flex flex-col h-full overflow-y-auto custom-scrollbar bg-slate-950/80 print:bg-white print:text-black ${isFullscreen ? 'p-8 bg-slate-950' : 'p-4 md:p-8'}`}
     >
-      
       <div className="mb-6 print:hidden flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white tracking-tight">Dashboard Retrabalho</h2>
@@ -104,18 +112,29 @@ const QualityReports = () => {
       </div>
 
       <div className="print:hidden">
-        <ReportFilters onFilterChange={handleFilterChange} filterOptions={filterOptions} />
+        <ReportFilters 
+          onFilterChange={handleFilterChange} 
+          filterOptions={filterOptions} 
+          currentFilters={currentFilters}
+          onCompareOpen={() => setIsCompareModalOpen(true)}
+        />
       </div>
 
-      {loading ? <div className="flex flex-col items-center justify-center flex-1 text-sky-500 min-h-[400px]">
+      {loading ? (
+        <div className="flex flex-col items-center justify-center flex-1 text-sky-500 min-h-[400px]">
           <Loader2 className="w-10 h-10 animate-spin mb-4" />
           <p className="text-slate-400 font-medium animate-pulse">Processando dados analíticos...</p>
-        </div> : <div className="space-y-6">
-          {/* Passed period filters to ReportSummary so it can display the correct date range */}
-          <ReportSummary logs={reportData.logs} prevLogs={reportData.prevLogs} period={{
-        startDate: currentFilters.startDate,
-        endDate: currentFilters.endDate
-      }} />
+        </div> 
+      ) : (
+        <div className="space-y-6">
+          <ReportSummary 
+            logs={reportData.logs} 
+            prevLogs={reportData.prevLogs} 
+            period={{
+              startDate: currentFilters.startDate,
+              endDate: currentFilters.endDate
+            }} 
+          />
 
           <ReportEvolutionChart data={reportData.evolutionData} />
 
@@ -125,12 +144,26 @@ const QualityReports = () => {
           </div>
 
           <div className="print:hidden">
-             <ReportExport logs={reportData.logs} period={{
-          startDate: currentFilters.startDate,
-          endDate: currentFilters.endDate
-        }} filters={currentFilters} />
+            <ReportExport 
+              logs={reportData.logs} 
+              period={{
+                startDate: currentFilters.startDate,
+                endDate: currentFilters.endDate
+              }} 
+              filters={currentFilters} 
+            />
           </div>
-        </div>}
-    </div>;
+        </div>
+      )}
+
+      <ComparisonCabinePainterModal
+        isOpen={isCompareModalOpen}
+        onClose={() => setIsCompareModalOpen(false)}
+        currentFilters={currentFilters}
+        onApplyFilters={handleFilterChange}
+      />
+    </div>
+  );
 };
+
 export default QualityReports;

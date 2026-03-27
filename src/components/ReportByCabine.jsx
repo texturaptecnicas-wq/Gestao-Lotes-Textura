@@ -1,11 +1,13 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, RefreshCw, Loader2, Factory, TrendingDown, AlertTriangle, User, ShieldAlert } from 'lucide-react';
+import { Calendar, RefreshCw, Loader2, Factory, TrendingDown, AlertTriangle, User, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { getPeriodRange } from '@/utils/periodHelpers';
 import { getWeightedMetricsForAllCabines, calculateWeightedReworkPercentage } from '@/services/qualityService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from 'recharts';
 import ReportTable from './ReportTable';
+import { groupAndCountActions } from '@/utils/actionNormalization';
 
 const getLocalToday = () => {
   const now = new Date();
@@ -94,7 +96,6 @@ const ReportByCabine = () => {
   const handleCabineSelect = (cabineId, logs) => {
     setActiveCabine(cabineId);
     setSelectedCabineLogs(logs);
-    // scroll to table slightly
   };
 
   const formatDisplayRange = () => {
@@ -108,6 +109,42 @@ const ReportByCabine = () => {
     return d1 === d2 ? d1 : `${d1} até ${d2}`;
   };
 
+  // Process actions into requested categories
+  const getCategorizedActions = (logs) => {
+    const categories = {
+      "FALTA DE PASSAR AR": [],
+      "ESTOURADA": [],
+      "CONTAMINADA": [],
+      "RISCO DE CONTAMINAÇÃO": [],
+      "OUTRAS AÇÕES": []
+    };
+
+    logs.forEach(log => {
+      if (!log.analysis_conclusion) return;
+      const prob = (log.problema || "").toUpperCase();
+      let assigned = false;
+      
+      for (const key of Object.keys(categories)) {
+        if (key !== "OUTRAS AÇÕES" && prob.includes(key)) {
+          categories[key].push(log.analysis_conclusion);
+          assigned = true;
+          break;
+        }
+      }
+      
+      if (!assigned) {
+        categories["OUTRAS AÇÕES"].push(log.analysis_conclusion);
+      }
+    });
+
+    return Object.entries(categories)
+      .map(([cat, actionsArray]) => ({
+        category: cat,
+        actions: groupAndCountActions(actionsArray)
+      }))
+      .filter(c => c.actions.length > 0);
+  };
+
   // Prepare chart data based on inputted totals
   const chartData = cabineData.map(cab => {
     const total = totalsPainted[cab.cabine] || 0;
@@ -119,6 +156,8 @@ const ReportByCabine = () => {
       weightedRework: cab.weightedRework
     };
   }).sort((a, b) => b.percentage - a.percentage);
+
+  const categorizedActionsData = getCategorizedActions(selectedCabineLogs);
 
   return (
     <div className="flex flex-col space-y-6">
@@ -272,6 +311,33 @@ const ReportByCabine = () => {
               )}
             </div>
           </div>
+
+          {/* Categorized Actions Summary */}
+          {categorizedActionsData.length > 0 && (
+            <div className="mt-6 bg-slate-900/50 border border-slate-800 rounded-xl p-5">
+              <h3 className="text-lg font-bold text-white mb-4">
+                Ações / Conclusões por Categoria {activeCabine ? `- Cabine ${activeCabine}` : ''}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {categorizedActionsData.map((catData, idx) => (
+                  <div key={idx} className="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80 transition-colors hover:border-slate-700">
+                    <h4 className="text-sm font-bold text-amber-400 mb-3 border-b border-slate-800 pb-2">{catData.category}</h4>
+                    <ul className="space-y-3">
+                      {catData.actions.map((acao, actIdx) => (
+                        <li key={actIdx} className="text-sm text-slate-200 flex items-start gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                          <span className="flex-1 leading-snug">{acao.label}</span>
+                          <span className="bg-slate-800 text-emerald-400 px-2 py-0.5 rounded-md text-xs font-bold border border-slate-700 whitespace-nowrap">
+                            (x{acao.count})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Details Table for Selected Cabine */}
           <div className="mt-6">

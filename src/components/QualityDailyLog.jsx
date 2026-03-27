@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, Plus, RefreshCw, Maximize2 } from 'lucide-react';
+import { Loader2, Plus, RefreshCw, Maximize2, ShieldCheck } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { 
   getDailyLogByDate, 
@@ -103,7 +104,17 @@ const QualityDailyLog = ({ userRole }) => {
       isNew: true,
       date: selectedDate || getLocalToday(),
       cabine: 1,
-      tamanho_peca: null
+      tamanho_peca: null,
+      isZeroRework: false
+    });
+  };
+
+  const handleCreateZeroRework = () => {
+    setEditingLog({
+      isNew: true,
+      date: selectedDate || getLocalToday(),
+      cabine: 1,
+      isZeroRework: true
     });
   };
 
@@ -174,7 +185,7 @@ const QualityDailyLog = ({ userRole }) => {
       
       {/* Top Header & Search */}
       <div className="p-3 md:p-4 border-b border-slate-800 bg-slate-900/80 flex flex-col xl:flex-row gap-3 md:gap-4 justify-between items-center shrink-0">
-        <div className="flex-1 w-full xl:max-w-[70%]">
+        <div className="flex-1 w-full xl:max-w-[50%]">
           <SearchAndFilterBar 
             searchTerm={searchTerm} 
             onSearch={setSearchTerm} 
@@ -186,10 +197,10 @@ const QualityDailyLog = ({ userRole }) => {
             onDateRangeChange={setDateRange}
           />
         </div>
-        <div className="flex gap-2 w-full xl:w-auto">
+        <div className="flex gap-2 w-full xl:w-auto overflow-x-auto pb-1 xl:pb-0 hide-scrollbar shrink-0">
           <button 
             onClick={() => setIsFullscreen(true)}
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors border border-slate-700 touch-target"
+            className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors border border-slate-700 touch-target shrink-0"
             title="Modo Tela Cheia Geral"
           >
             <Maximize2 className="w-5 h-5" />
@@ -200,14 +211,21 @@ const QualityDailyLog = ({ userRole }) => {
               if (dateRange.start && dateRange.end) fetchLogsForRange(dateRange.start, dateRange.end);
               else fetchLogs(selectedDate);
             }} 
-            className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl transition-colors border border-slate-700 touch-target"
+            className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl transition-colors border border-slate-700 touch-target shrink-0"
             title="Atualizar"
           >
             <RefreshCw className="w-5 h-5" />
           </button>
           <button 
+            onClick={handleCreateZeroRework}
+            className="px-4 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 touch-target shrink-0 whitespace-nowrap"
+            title="Registrar Dia Sem Retrabalho"
+          >
+            <ShieldCheck className="w-5 h-5 hidden sm:block" /> Sem Retrabalho
+          </button>
+          <button 
             onClick={handleCreateNew}
-            className="flex-1 md:flex-none px-4 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 touch-target"
+            className="px-4 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 touch-target shrink-0 whitespace-nowrap"
           >
             <Plus className="w-5 h-5" /> Novo Registro
           </button>
@@ -262,7 +280,13 @@ const QualityDailyLog = ({ userRole }) => {
             </div>
           ) : filteredLogs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-500 bg-slate-900/40 border border-slate-800 border-dashed rounded-2xl p-4 text-center">
-              <p className="text-base md:text-lg">Nenhum registro encontrado para esta data e filtros.</p>
+              <p className="text-base md:text-lg mb-4">Nenhum registro encontrado para esta data e filtros.</p>
+              <button 
+                onClick={handleCreateZeroRework}
+                className="px-6 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 rounded-lg flex items-center justify-center gap-2 transition-colors touch-target"
+              >
+                <ShieldCheck className="w-5 h-5" /> Registrar Dia Sem Retrabalho
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">

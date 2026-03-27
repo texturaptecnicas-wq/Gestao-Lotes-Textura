@@ -1,3 +1,4 @@
+
 export const calculateReworkPercentage = (totalReworkPieces, totalPiecesInPeriod, pieceSizeWeights = {}) => {
   const total = parseInt(totalPiecesInPeriod, 10);
   
@@ -11,6 +12,8 @@ export const calculateReworkPercentage = (totalReworkPieces, totalPiecesInPeriod
   if (Array.isArray(totalReworkPieces)) {
     weightedRework = totalReworkPieces.reduce((sum, log) => {
       const qty = parseInt(log.quantidade) || 0;
+      if (qty === 0) return sum; // Zero-rework days don't add to total rework
+      
       // Default weight is 1.0 if not specified
       const weight = pieceSizeWeights[log.tamanho_peca] || 1.0; 
       return sum + (qty * weight);

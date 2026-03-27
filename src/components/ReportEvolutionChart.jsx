@@ -1,5 +1,7 @@
+
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
+
 const CustomTooltip = ({
   active,
   payload,
@@ -18,23 +20,28 @@ const CustomTooltip = ({
             backgroundColor: entry.color
           }}></div>
               <span className="text-slate-400">Retrabalho:</span>
-              <span className="font-bold text-white">{entry.value} peças</span>
+              <span className="font-bold text-white">
+                {entry.value === 0 ? '0 retrabalhos (Dia Limpo)' : `${entry.value} peças`}
+              </span>
             </div>
           </div>)}
       </div>;
   }
   return null;
 };
+
 const ReportEvolutionChart = ({
   data
 }) => {
-  // Filter out empty periods to show ONLY dates that have actual records
-  const filteredData = data?.filter(item => item.totalRework > 0) || [];
+  // Include dates with actual rework OR days explicitly marked as zero-rework
+  const filteredData = data?.filter(item => item.totalRework > 0 || item.isZeroRework) || [];
+  
   if (!filteredData || filteredData.length === 0) {
     return <div className="dashboard-card flex items-center justify-center h-80">
         <p className="text-slate-500">Nenhum dado de retrabalho para o período selecionado.</p>
       </div>;
   }
+
   return <div className="dashboard-card w-full mb-8">
       <h3 className="text-xl font-bold text-white mb-6">Evolução do Retrabalho</h3>
       <div className="chart-container relative">
@@ -52,7 +59,7 @@ const ReportEvolutionChart = ({
             month: '2-digit'
           })} />
             <YAxis stroke="#94a3b8" fontSize={12} allowDecimals={false} />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.05)' }} />
             <Legend wrapperStyle={{
             paddingTop: '20px'
           }} />
@@ -72,4 +79,5 @@ const ReportEvolutionChart = ({
       </div>
     </div>;
 };
+
 export default ReportEvolutionChart;

@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -57,6 +58,16 @@
     --alert-bg: 0 84% 95%;
     --alert-border: 0 84% 60%;
     --alert-text: 0 84% 20%;
+    
+    /* Pintor Colors for Comparison Modal */
+    --pintor-color-1: 221 83% 53%; /* Blue */
+    --pintor-color-2: 152 69% 31%; /* Emerald */
+    --pintor-color-3: 45 93% 47%; /* Amber */
+    --pintor-color-4: 262 83% 58%; /* Violet */
+    --pintor-color-5: 330 81% 60%; /* Pink */
+    --pintor-color-6: 0 84% 60%; /* Red */
+    --pintor-color-7: 189 94% 43%; /* Cyan */
+    --pintor-color-8: 24 95% 53%; /* Orange */
   }
 
   .dark {
@@ -90,6 +101,16 @@
     --alert-bg: 0 84% 15%;
     --alert-border: 0 84% 40%;
     --alert-text: 0 84% 90%;
+    
+    /* Pintor Colors Dark Mode Adaptations */
+    --pintor-color-1: 221 83% 60%;
+    --pintor-color-2: 152 69% 45%;
+    --pintor-color-3: 45 93% 55%;
+    --pintor-color-4: 262 83% 65%;
+    --pintor-color-5: 330 81% 65%;
+    --pintor-color-6: 0 84% 65%;
+    --pintor-color-7: 189 94% 50%;
+    --pintor-color-8: 24 95% 60%;
   }
 }
 
