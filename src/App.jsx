@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,6 +9,8 @@ import { Toaster } from '@/components/ui/toaster';
 import { toast } from '@/components/ui/use-toast';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import LoteCard from '@/components/LoteCard';
+import { cleanupStorage } from '@/utils/cleanupStorage';
+import { useDelayedLotes } from '@/hooks/useDelayedLotes';
 
 // Lazy loaded components
 const AddLoteModal = React.lazy(() => import('@/components/AddLoteModal'));
@@ -45,15 +48,21 @@ function LotesManager() {
   const [cabineFilter, setCabineFilter] = useState('1');
   
   // App Navigation State
-  const [activeModule, setActiveModule] = useState('lotes'); // 'lotes' | 'financeiro'
+  const [activeModule, setActiveModule] = useState('lotes'); 
 
   // Auth State
   const [userRole, setUserRole] = useState(null);
   const [loginType, setLoginType] = useState(null);
   const [showFinanceLogin, setShowFinanceLogin] = useState(false);
 
-  // Initial Auth Check
+  // Derived delayed lotes state
+  const [showOnlyDelayed, setShowOnlyDelayed] = useState(false);
+  const { delayedLotes, delayedCount } = useDelayedLotes(lotes);
+
+  // Initial Auth Check & Cleanup
   useEffect(() => {
+    cleanupStorage(); // Clean up unused storage keys
+    
     const storedRole = localStorage.getItem('userRole');
     const storedType = localStorage.getItem('loginType');
     
@@ -68,7 +77,6 @@ function LotesManager() {
   const fetchLotes = useCallback(async () => {
     const { data, error } = await supabase.from('lotes').select('*').order('data_criacao', { ascending: true });
     if (error) {
-      console.error('Error fetching lotes:', error);
       toast({ title: "❌ Erro ao buscar lotes", description: error.message, variant: "destructive" });
     } else {
       setLotes(data || []);
@@ -78,7 +86,6 @@ function LotesManager() {
   const fetchHistorico = useCallback(async () => {
     const { data, error } = await supabase.from('historico').select('*').order('data_entrega', { ascending: false });
     if (error) {
-      console.error('Error fetching historico:', error);
       toast({ title: "❌ Erro ao buscar histórico", description: error.message, variant: "destructive" });
     } else {
       setHistorico(data || []);
@@ -213,7 +220,7 @@ function LotesManager() {
   const handleDeleteLote = useCallback(async (id) => {
     if (userRole !== 'administrador') { toast({ title: "🚫 Acesso Negado", description: "Você não tem permissão para excluir.", variant: "destructive" }); return; }
     const loteToDelete = lotes.find(l => l.id === id);
-    if (loteToDelete?.foto) { const { error: storageError } = await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]); if (storageError) console.error(storageError); }
+    if (loteToDelete?.foto) { await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]); }
     const { error } = await supabase.from('lotes').delete().eq('id', id);
     if (error) { toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" }); } 
     else { toast({ title: "🗑️ Lote removido", description: "Lote excluído com sucesso." }); }
@@ -222,14 +229,24 @@ function LotesManager() {
   const handleDeleteHistoricoLote = useCallback(async (id) => {
     if (userRole !== 'administrador') { toast({ title: "🚫 Acesso Negado", description: "Permissão para excluir do histórico negada.", variant: "destructive" }); return; }
     const loteToDelete = historico.find(l => l.id === id);
-    if (loteToDelete?.foto) { const { error: storageError } = await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]); if (storageError) console.error(storageError); }
+    if (loteToDelete?.foto) { await supabase.storage.from('fotos-lotes').remove([loteToDelete.foto]); }
     const { error } = await supabase.from('historico').delete().eq('id', id);
     if (error) { toast({ title: "❌ Erro ao remover", description: error.message, variant: "destructive" }); } 
     else { toast({ title: "🗑️ Lote removido do histórico", description: "Lote excluído." }); }
   }, [userRole, historico]);
 
-  const resetAllFilters = useCallback(() => { setSearchTerm(''); setStatusFilters({ pago: 'any', medida: 'any', nota_fiscal: 'any' }); }, []);
-  const handleFilterChange = useCallback((newFilter) => { setFilterStatus(newFilter); if (newFilter === 'programado') { setCabineFilter('1'); } window.scrollTo(0, 0); }, []);
+  const resetAllFilters = useCallback(() => { setSearchTerm(''); setStatusFilters({ pago: 'any', medida: 'any', nota_fiscal: 'any' }); setShowOnlyDelayed(false); }, []);
+  
+  const handleFilterChange = useCallback((newFilter) => { 
+    setFilterStatus(newFilter); 
+    if (newFilter === 'programado') { 
+      setCabineFilter('1'); 
+    } else {
+      setShowOnlyDelayed(false);
+    }
+    window.scrollTo(0, 0); 
+  }, []);
+  
   const handleStatusFilterChange = useCallback((filterName, value) => { setStatusFilters(prev => ({...prev, [filterName]: value})); window.scrollTo(0, 0); }, []);
 
   const handleDragEnd = async (result) => {
@@ -258,9 +275,15 @@ function LotesManager() {
     const recebido = lotes.filter(l => !l.programado && !l.pintado && applyFilters(l));
     const programadoRaw = lotes.filter(l => l.programado && !l.pintado && applyFilters(l));
     const pintado = lotes.filter(l => l.pintado && applyFilters(l));
-    const programado = cabineFilter === 'all' ? programadoRaw : programadoRaw.filter(l => l.cabine === parseInt(cabineFilter));
+    
+    let programado = cabineFilter === 'all' ? programadoRaw : programadoRaw.filter(l => l.cabine === parseInt(cabineFilter));
+    
+    if (showOnlyDelayed) {
+      programado = programado.filter(l => delayedLotes.some(dl => dl.id === l.id));
+    }
+
     return { recebido, programado, pintado };
-  }, [lotes, searchTerm, statusFilters, cabineFilter]);
+  }, [lotes, searchTerm, statusFilters, cabineFilter, showOnlyDelayed, delayedLotes]);
 
   const stats = useMemo(() => ({
     total: lotes.length,
@@ -392,13 +415,26 @@ function LotesManager() {
                 </div>
 
                 {filterStatus === 'programado' && (
-                  <div className="mt-4 glass-effect rounded-xl p-1 flex items-center gap-1 flex-wrap">
-                    {cabineFilterOptions.map(cab => (
-                       <motion.button key={cab} layout onClick={() => setCabineFilter(cab)} className={`relative flex-1 px-3 py-2 rounded-lg font-semibold transition-colors text-sm min-w-[80px] ${cabineFilter === cab ? '' : 'text-slate-300 hover:text-white'}`}>
-                        {cabineFilter === cab && <motion.div layoutId="active-cabine-pill" className="absolute inset-0 bg-slate-700/80 rounded-lg z-0" />}
-                        <span className="relative z-10">{cab === 'all' ? 'Todas' : `Cab. ${cab}`}</span>
-                       </motion.button>
-                    ))}
+                  <div className="mt-4 glass-effect rounded-xl p-1 flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1 flex-1 flex-wrap">
+                      {cabineFilterOptions.map(cab => (
+                         <motion.button key={cab} layout onClick={() => setCabineFilter(cab)} className={`relative flex-1 px-3 py-2 rounded-lg font-semibold transition-colors text-sm min-w-[80px] ${cabineFilter === cab ? '' : 'text-slate-300 hover:text-white'}`}>
+                          {cabineFilter === cab && <motion.div layoutId="active-cabine-pill" className="absolute inset-0 bg-slate-700/80 rounded-lg z-0" />}
+                          <span className="relative z-10">{cab === 'all' ? 'Todas' : `Cab. ${cab}`}</span>
+                         </motion.button>
+                      ))}
+                    </div>
+                    {delayedCount > 0 && (
+                      <motion.button 
+                         whileHover={{ scale: 1.05 }}
+                         whileTap={{ scale: 0.95 }}
+                         onClick={() => setShowOnlyDelayed(!showOnlyDelayed)}
+                         className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ml-auto ${showOnlyDelayed ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 ring-2 ring-red-400' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'}`}
+                         title={`${delayedCount} lotes programados do dia anterior não foram pintados`}
+                      >
+                         ⚠️ {delayedCount} {delayedCount === 1 ? 'Atrasado' : 'Atrasados'}
+                      </motion.button>
+                    )}
                   </div>
                 )}
               </motion.header>
