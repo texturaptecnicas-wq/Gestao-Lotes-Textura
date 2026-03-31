@@ -1,4 +1,3 @@
-
 export const calculateReworkPercentage = (totalReworkPieces, totalPiecesInPeriod, pieceSizeWeights = {}) => {
   const total = parseInt(totalPiecesInPeriod, 10);
   

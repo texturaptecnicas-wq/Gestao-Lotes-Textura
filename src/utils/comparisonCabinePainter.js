@@ -1,4 +1,3 @@
-
 import { getFilteredLogs } from '@/services/qualityService';
 import { normalizePainterName } from './painterNormalization';
 import { normalizeClientName } from './clientNormalization';

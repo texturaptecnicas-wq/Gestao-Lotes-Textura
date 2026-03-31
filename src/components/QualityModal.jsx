@@ -111,14 +111,15 @@ const QualityModal = ({
 
   const handleSubmit = async e => {
     e.preventDefault();
-    if (!formData.client_name.trim()) {
+    if (!formData.client_name.trim() && !formData.cor.trim()) {
       toast({
         title: "Aviso",
-        description: "Nome do cliente é obrigatório.",
+        description: "Por favor, vincule o alerta a pelo menos uma cor ou um cliente",
         variant: "destructive"
       });
       return;
     }
+    
     setSubmitting(true);
     let finalImageUrl = formData.image_url;
     try {
@@ -243,13 +244,13 @@ const QualityModal = ({
                       </h3>
                       <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-slate-400 mb-1">Cliente *</label>
+                          <label className="block text-sm font-medium text-slate-400 mb-1">Cliente (Opcional)</label>
                           <input type="text" value={formData.client_name} onChange={e => setFormData({ ...formData, client_name: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm" placeholder="Nome do cliente" />
                         </div>
                         
                         <div>
                           <label className="block text-sm font-medium text-slate-400 mb-1">Cor (Opcional)</label>
-                          <input type="text" value={formData.cor} onChange={e => setFormData({ ...formData, cor: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm" placeholder="Ex: Branco, Preto (Vazio = qualquer cor)" />
+                          <input type="text" value={formData.cor} onChange={e => setFormData({ ...formData, cor: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:ring-2 focus:ring-amber-500 text-sm" placeholder="Ex: Branco, Preto" />
                         </div>
 
                         <div>

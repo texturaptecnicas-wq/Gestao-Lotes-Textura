@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { Helmet } from 'react-helmet';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Routes, Route } from 'react-router-dom';
 import { Package, Plus, Search, QrCode, Truck, Building, CalendarCheck, CheckCircle, LogOut, DollarSign, Ruler, FileText, FilterX, ShieldAlert } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Toaster } from '@/components/ui/toaster';
@@ -18,6 +18,7 @@ const FinanceLogin = React.lazy(() => import('@/components/FinanceLogin'));
 const FinanceModule = React.lazy(() => import('@/components/FinanceModule'));
 const CabineSelectModal = React.lazy(() => import('@/components/CabineSelectModal'));
 const QualityModal = React.lazy(() => import('@/components/QualityModal'));
+const PixLancamentoPage = React.lazy(() => import('@/pages/PixLancamentoPage'));
 
 const LoadingFallback = () => (
   <div className="fixed inset-0 bg-slate-900 backdrop-blur-sm flex items-center justify-center z-[100]">
@@ -28,7 +29,7 @@ const LoadingFallback = () => (
   </div>
 );
 
-function App() {
+function LotesManager() {
   const [lotes, setLotes] = useState([]);
   const [historico, setHistorico] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -296,7 +297,6 @@ function App() {
     return (
       <Suspense fallback={<LoadingFallback />}>
         <FinanceModule onBack={handleLogout} />
-        <Toaster />
       </Suspense>
     );
   }
@@ -312,7 +312,7 @@ function App() {
 
       <div className="min-h-screen">
         
-        {/* Render Finance Module if selected by Admin (Restored if needed, but menu access removed as requested) */}
+        {/* Render Finance Module if selected by Admin */}
         {activeModule === 'financeiro' && userRole === 'administrador' && (
           <Suspense fallback={<LoadingFallback />}>
              <FinanceModule onBack={() => setActiveModule('lotes')} />
@@ -450,10 +450,21 @@ function App() {
           <QualityModal isOpen={isQualityModalOpen} onClose={() => setIsQualityModalOpen(false)} userRole={userRole} />
         </Suspense>
         
-        <Toaster />
       </div>
     </DragDropContext>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <>
+      <Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          <Route path="/" element={<LotesManager />} />
+          <Route path="/finance" element={<PixLancamentoPage />} />
+        </Routes>
+      </Suspense>
+      <Toaster />
+    </>
+  );
+}

@@ -1,8 +1,8 @@
-
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle } from 'lucide-react';
-import { toast } from '@/components/ui/use-toast';
+import { useToast } from '@/components/ui/use-toast';
 import QRCodeGenerator from '@/components/QRCodeGenerator';
 import WhatsAppMessageModal from '@/components/WhatsAppMessageModal';
 import ScheduleModal from '@/components/ScheduleModal';
@@ -66,6 +66,8 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
   const [isLoadingImage, setIsLoadingImage] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState(null);
   
+  const navigate = useNavigate();
+  const { toast, dismiss } = useToast();
   const { alerts, loading: loadingAlerts } = useQualityAlerts(lote.cliente);
 
   const triggeredAlerts = useMemo(() => {
@@ -96,11 +98,38 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
       return;
     }
 
-    const nextStatus = { 'unanalysed': 'pending', 'pending': 'ok', 'ok': 'unanalysed' };
-    onUpdateStatus(lote.id, { [field]: nextStatus[currentStatus] });
+    const nextStatusMap = { 'unanalysed': 'pending', 'pending': 'ok', 'ok': 'unanalysed' };
+    const nextStatus = nextStatusMap[currentStatus];
+    onUpdateStatus(lote.id, { [field]: nextStatus });
     
-    if (field === 'pago' && nextStatus[currentStatus] === 'ok') {
-      toast({ title: "✅ Pagamento OK", description: "O status foi atualizado no lote." });
+    if (field === 'pago' && nextStatus === 'ok') {
+      const toastId = `pix-prompt-${lote.id}`;
+      toast({
+        id: toastId,
+        title: "Lote Marcado como Pago",
+        description: "Deseja lançar o PIX no financeiro?",
+        duration: 9999999, // Persistent toast
+        action: (
+          <div className="flex gap-2.5 ml-2 mt-1">
+            <button
+              onClick={() => {
+                dismiss(toastId);
+                const valorQuery = lote.valor || lote.quantidade || '';
+                navigate(`/finance?loteId=${lote.id}&valor=${valorQuery}&data=${lote.data_criacao}&descricao=${encodeURIComponent(lote.cliente)}&cliente=${encodeURIComponent(lote.cliente)}`);
+              }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-1.5 rounded-md text-xs font-bold transition-all shadow-md active:scale-95"
+            >
+              Sim
+            </button>
+            <button
+              onClick={() => dismiss(toastId)}
+              className="bg-slate-700 hover:bg-slate-600 text-white px-3.5 py-1.5 rounded-md text-xs font-bold transition-all shadow-sm active:scale-95"
+            >
+              Não
+            </button>
+          </div>
+        ),
+      });
     }
   };
 

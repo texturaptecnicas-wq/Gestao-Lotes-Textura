@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { getFilteredLogs } from '@/services/qualityService';
 import { getComparisonColor } from '@/utils/comparisonColorConfig';

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Loader2, Maximize, Minimize } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';

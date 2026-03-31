@@ -1,4 +1,3 @@
-
 export const CLIENT_COLORS = [
   '#3B82F6', // Blue
   '#10B981', // Emerald

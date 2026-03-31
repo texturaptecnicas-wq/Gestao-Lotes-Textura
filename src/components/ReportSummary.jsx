@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import ReportSummaryCards from './ReportSummaryCards';
 import { getZeroReworkDays } from '@/services/qualityService';

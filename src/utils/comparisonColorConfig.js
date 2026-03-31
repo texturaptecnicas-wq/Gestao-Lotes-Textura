@@ -1,4 +1,3 @@
-
 export const COLOR_PALETTE = [
   '#3b82f6', // Blue
   '#10b981', // Emerald

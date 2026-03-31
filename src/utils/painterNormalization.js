@@ -1,4 +1,3 @@
-
 export const normalizePainterName = (name) => {
   if (!name || typeof name !== 'string') return 'Sem Pintor';
   const clean = name.trim().replace(/\s+/g, ' ');

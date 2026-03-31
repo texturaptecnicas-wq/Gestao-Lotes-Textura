@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { X, Save, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';

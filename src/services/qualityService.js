@@ -31,25 +31,42 @@ export const normalizeAndGetOfficialName = async (name) => {
 
 // --- ALERTS & DAILY LOG --- 
 export const createQualityAlert = async ({ client_name, description, image_url, created_by, cor }) => {
-  const { normalized } = await normalizeAndGetOfficialName(client_name);
+  let normalized = null;
+  let official = null;
+  
+  if (client_name && client_name.trim() !== '') {
+    const res = await normalizeAndGetOfficialName(client_name);
+    normalized = res.normalized;
+    official = res.official_name;
+  }
+
   const { data, error } = await supabase.from('quality_alerts').insert([{ 
-    client_name, 
-    client_normalized: normalized, 
+    client_name: official || client_name || null, 
+    client_normalized: normalized || null, 
     description, 
     image_url, 
     created_by, 
     cor: cor || null,
     active: true 
   }]).select().single();
+  
   if (error) throw error;
   return data;
 };
 
 export const updateQualityAlert = async (id, { client_name, description, cor }) => {
-  const { normalized } = await normalizeAndGetOfficialName(client_name);
+  let normalized = null;
+  let official = null;
+  
+  if (client_name && client_name.trim() !== '') {
+    const res = await normalizeAndGetOfficialName(client_name);
+    normalized = res.normalized;
+    official = res.official_name;
+  }
+
   const { data, error } = await supabase.from('quality_alerts').update({
-    client_name,
-    client_normalized: normalized,
+    client_name: official || client_name || null,
+    client_normalized: normalized || null,
     description,
     cor: cor || null
   }).eq('id', id).select().single();
@@ -81,19 +98,27 @@ export const deactivateAlert = async (alertId) => {
 export const checkAlertTrigger = (lote, alert) => {
   if (!lote || !alert) return false;
   
-  const loteClient = lote.cliente ? lote.cliente.trim().toLowerCase() : '';
-  const alertClient = alert.client_name ? alert.client_name.trim().toLowerCase() : '';
-  const alertNormalized = alert.client_normalized ? alert.client_normalized : '';
-  const loteNormalized = normalizeClientName(lote.cliente || '');
+  const hasAlertClient = alert.client_name && alert.client_name.trim() !== '';
+  const hasAlertColor = alert.cor && alert.cor.trim() !== '';
 
-  const clientMatches = loteNormalized === alertNormalized || loteClient === alertClient;
-  if (!clientMatches) return false;
+  if (!hasAlertClient && !hasAlertColor) return false; // Invalid alert, neither configured
 
-  if (alert.cor && alert.cor.trim() !== '') {
+  if (hasAlertClient) {
+    const loteClient = lote.cliente ? lote.cliente.trim().toLowerCase() : '';
+    const alertClient = alert.client_name.trim().toLowerCase();
+    const alertNormalized = alert.client_normalized || '';
+    const loteNormalized = normalizeClientName(lote.cliente || '');
+
+    const clientMatches = loteNormalized === alertNormalized || loteClient === alertClient;
+    if (!clientMatches) return false;
+  }
+
+  if (hasAlertColor) {
     const loteCor = lote.cor ? lote.cor.trim().toLowerCase() : '';
     const alertCor = alert.cor.trim().toLowerCase();
-    return loteCor === alertCor;
+    if (loteCor !== alertCor) return false;
   }
+
   return true;
 };
 

@@ -1,4 +1,3 @@
-
 export const normalizeText = (text) => {
   if (!text || typeof text !== 'string') return '';
   
