@@ -1,4 +1,3 @@
-
 /**
  * Utility to clean up browser storage and cache.
  * 

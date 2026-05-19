@@ -183,6 +183,20 @@ body {
     @apply text-sm text-red-100 font-medium leading-snug;
   }
 
+  /* Image Zoom Modal Utilities */
+  .zoom-modal-overlay {
+    touch-action: none;
+    oversoverscroll-behavior: none;
+  }
+
+  .touch-action-none {
+    touch-action: none;
+  }
+
+  .touch-action-manipulation {
+    touch-action: manipulation;
+  }
+
   /* Remove default arrows for numeric input fields */
   input[type=number]::-webkit-inner-spin-button, 
   input[type=number]::-webkit-outer-spin-button { 

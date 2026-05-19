@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -68,7 +69,8 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
   
   const navigate = useNavigate();
   const { toast, dismiss } = useToast();
-  const { alerts, loading: loadingAlerts } = useQualityAlerts(lote.cliente);
+  
+  const { alerts, loading: loadingAlerts } = useQualityAlerts();
 
   const triggeredAlerts = useMemo(() => {
     if (!alerts) return [];
@@ -108,7 +110,7 @@ const LoteCard = ({ lote, userRole, onUpdateStatus, onMarcarEntregue, onDelete, 
         id: toastId,
         title: "Lote Marcado como Pago",
         description: "Deseja lançar o PIX no financeiro?",
-        duration: 9999999, // Persistent toast
+        duration: 9999999,
         action: (
           <div className="flex gap-2.5 ml-2 mt-1">
             <button

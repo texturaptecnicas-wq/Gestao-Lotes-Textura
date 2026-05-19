@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Loader2, ArrowLeft } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
-import { getFinancialRecords, getFinancialSummary, createFinancialRecord, updateFinancialRecord, deleteFinancialRecord } from '@/services/financeService';
+import { getFinancialRecords, createFinancialRecord, updateFinancialRecord, deleteFinancialRecord } from '@/services/financeService';
 
 import FinanceFilters from './FinanceFilters';
 import FinanceSummary from './FinanceSummary';
@@ -11,8 +12,7 @@ import FinanceReportTable from './FinanceReportTable';
 import FinanceModal from './FinanceModal';
 
 const FinanceModule = ({ onBack }) => {
-  const [records, setRecords] = useState([]);
-  const [summary, setSummary] = useState({});
+  const [rawRecords, setRawRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [recordToEdit, setRecordToEdit] = useState(null);
@@ -21,29 +21,96 @@ const FinanceModule = ({ onBack }) => {
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     tipo: 'todos',
-    status: 'todos',
-    categoria: 'todos'
+    categoria: 'todos',
+    sortByValue: 'none'
   });
 
-  const fetchData = useCallback(async () => {
+  const fetchRawData = useCallback(async () => {
     setLoading(true);
     try {
-      const [data, sum] = await Promise.all([
-        getFinancialRecords(filters),
-        getFinancialSummary(filters)
-      ]);
-      setRecords(data);
-      setSummary(sum);
+      // Only filter by date initially to get all categories for dropdown
+      const data = await getFinancialRecords({ startDate: filters.startDate, endDate: filters.endDate });
+      setRawRecords(data);
     } catch (error) {
       toast({ title: "Erro ao carregar dados", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters.startDate, filters.endDate]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchRawData();
+  }, [fetchRawData]);
+
+  const availableCategories = useMemo(() => {
+    const cats = new Set(rawRecords.map(r => r.categoria).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [rawRecords]);
+
+  const processedData = useMemo(() => {
+    let filtered = rawRecords;
+
+    // Apply category and type filters
+    if (filters.categoria && filters.categoria !== 'todos') {
+      filtered = filtered.filter(r => r.categoria === filters.categoria);
+    }
+    if (filters.tipo && filters.tipo !== 'todos') {
+      filtered = filtered.filter(r => r.tipo === filters.tipo);
+    }
+
+    const groups = {};
+    let tEntradas = 0;
+    let tSaidas = 0;
+
+    filtered.forEach(record => {
+      if (record.status !== 'cancelado') {
+        const val = Number(record.valor);
+        if (record.tipo === 'entrada') tEntradas += val;
+        if (record.tipo === 'saida') tSaidas += val;
+      }
+
+      const client = record.descricao || 'Sem Cliente Especificado';
+      if (!groups[client]) {
+        groups[client] = {
+          clientName: client,
+          categoriesSet: new Set(),
+          total: 0,
+          transactions: [],
+          latestDate: record.data_lancamento
+        };
+      }
+      
+      groups[client].transactions.push(record);
+      if (record.categoria) groups[client].categoriesSet.add(record.categoria);
+      
+      const val = Number(record.valor);
+      groups[client].total += (record.tipo === 'saida' ? -val : val);
+      
+      if (new Date(record.data_lancamento) > new Date(groups[client].latestDate)) {
+        groups[client].latestDate = record.data_lancamento;
+      }
+    });
+
+    let groupedArray = Object.values(groups).map(g => ({
+      ...g,
+      categories: Array.from(g.categoriesSet).join(', ')
+    }));
+
+    // Sorting
+    const sortBy = filters.sortByValue || 'none';
+    if (sortBy === 'desc') {
+      groupedArray.sort((a, b) => b.total - a.total);
+    } else if (sortBy === 'asc') {
+      groupedArray.sort((a, b) => a.total - b.total);
+    } else {
+      groupedArray.sort((a, b) => new Date(b.latestDate) - new Date(a.latestDate));
+    }
+
+    return {
+      groupedArray,
+      summary: { totalEntradas: tEntradas, totalSaidas: tSaidas, saldoLiquido: tEntradas - tSaidas }
+    };
+  }, [rawRecords, filters]);
 
   const handleSave = async (data, id) => {
     try {
@@ -54,7 +121,7 @@ const FinanceModule = ({ onBack }) => {
         await createFinancialRecord(data);
         toast({ title: "Sucesso", description: "Registro criado." });
       }
-      fetchData();
+      fetchRawData();
     } catch (error) {
       throw error;
     }
@@ -65,7 +132,7 @@ const FinanceModule = ({ onBack }) => {
       try {
         await deleteFinancialRecord(id);
         toast({ title: "Cancelado", description: "O registro foi marcado como cancelado." });
-        fetchData();
+        fetchRawData();
       } catch (error) {
         toast({ title: "Erro", description: error.message, variant: "destructive" });
       }
@@ -101,7 +168,11 @@ const FinanceModule = ({ onBack }) => {
           </button>
         </header>
 
-        <FinanceFilters filters={filters} onFilterChange={setFilters} />
+        <FinanceFilters 
+          filters={filters} 
+          onFilterChange={setFilters} 
+          availableCategories={availableCategories} 
+        />
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 text-sky-500">
@@ -110,9 +181,13 @@ const FinanceModule = ({ onBack }) => {
           </div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-            <FinanceSummary summary={summary} />
-            <FinanceCharts records={records} />
-            <FinanceReportTable records={records} onEdit={openModal} onDelete={handleDelete} />
+            <FinanceSummary summary={processedData.summary} />
+            <FinanceCharts />
+            <FinanceReportTable 
+              groupedData={processedData.groupedArray} 
+              onEdit={openModal} 
+              onDelete={handleDelete} 
+            />
           </motion.div>
         )}
 

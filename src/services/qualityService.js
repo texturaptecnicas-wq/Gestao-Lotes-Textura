@@ -3,12 +3,6 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { normalizeClientName } from '@/utils/clientNormalization';
 import { normalizePainterName } from '@/utils/painterNormalization';
 
-// ============================================================================
-// NOTICE: THIS SERVICE IS COMPLETELY ISOLATED FROM FINANCIAL OPERATIONS.
-// IT ONLY INTERACTS WITH quality_reports, quality_alerts, AND quality_daily_log.
-// NO REFERENCES TO pix_lancados, pix_pendentes, OR pix_records EXIST HERE.
-// ============================================================================
-
 const SIZE_WEIGHTS = {
   'muito_pequena': 0.5,
   'pequena': 1.0,
@@ -29,7 +23,6 @@ export const normalizeAndGetOfficialName = async (name) => {
   return { official_name: data?.official_name || name, normalized };
 };
 
-// --- ALERTS & DAILY LOG --- 
 export const createQualityAlert = async ({ client_name, description, image_url, created_by, cor }) => {
   let normalized = null;
   let official = null;
@@ -83,6 +76,13 @@ export const getAlertsByClient = async (clientName) => {
   return data || [];
 };
 
+export const getAlertsByColor = async (colorKeyword) => {
+  if (!colorKeyword) return [];
+  const { data, error } = await supabase.from('quality_alerts').select('*').eq('active', true).ilike('cor', `%${colorKeyword}%`);
+  if (error) throw error;
+  return data || [];
+};
+
 export const getAllAlerts = async () => {
   const { data, error } = await supabase.from('quality_alerts').select('*').eq('active', true).order('created_at', { ascending: false });
   if (error) throw error;
@@ -101,25 +101,33 @@ export const checkAlertTrigger = (lote, alert) => {
   const hasAlertClient = alert.client_name && alert.client_name.trim() !== '';
   const hasAlertColor = alert.cor && alert.cor.trim() !== '';
 
-  if (!hasAlertClient && !hasAlertColor) return false; // Invalid alert, neither configured
+  if (!hasAlertClient && !hasAlertColor) return false;
 
+  let clientMatches = true;
   if (hasAlertClient) {
     const loteClient = lote.cliente ? lote.cliente.trim().toLowerCase() : '';
     const alertClient = alert.client_name.trim().toLowerCase();
     const alertNormalized = alert.client_normalized || '';
     const loteNormalized = normalizeClientName(lote.cliente || '');
-
-    const clientMatches = loteNormalized === alertNormalized || loteClient === alertClient;
-    if (!clientMatches) return false;
+    clientMatches = (loteNormalized === alertNormalized) || (loteClient === alertClient);
   }
 
+  let colorMatches = true;
   if (hasAlertColor) {
     const loteCor = lote.cor ? lote.cor.trim().toLowerCase() : '';
     const alertCor = alert.cor.trim().toLowerCase();
-    if (loteCor !== alertCor) return false;
+    colorMatches = loteCor.includes(alertCor);
   }
 
-  return true;
+  if (hasAlertClient && hasAlertColor) {
+    return clientMatches && colorMatches;
+  } else if (hasAlertClient) {
+    return clientMatches;
+  } else if (hasAlertColor) {
+    return colorMatches;
+  }
+
+  return false;
 };
 
 export const createDailyLogEntry = async (logData) => {
@@ -130,7 +138,7 @@ export const createDailyLogEntry = async (logData) => {
       client_name: logData.cliente || logData.client_name,
       client_normalized: normalized, 
       cor: logData.cor || null, 
-      pintor: normalizePainterName(logData.pintor), // Applied normalization
+      pintor: normalizePainterName(logData.pintor),
       problema: logData.sintoma || logData.problema || null,
       quantidade: logData.quantidade !== undefined ? logData.quantidade : 1, 
       tamanho_peca: logData.tamanho_peca || null,
@@ -161,8 +169,6 @@ export const deleteDailyLogEntry = async (logId) => {
   if (error) throw error;
   return true;
 };
-
-// --- REPORTS ---
 
 export const getFilteredLogs = async (startDate, endDate, filters = {}) => {
   let query = supabase
@@ -205,7 +211,7 @@ export const calculateWeightedReworkPercentage = (recordsOrWeightedSum, totalPie
   if (Array.isArray(recordsOrWeightedSum)) {
     weightedSum = recordsOrWeightedSum.reduce((sum, log) => {
       const qty = parseInt(log.quantidade) || 0;
-      if (qty === 0) return sum; // Zero-rework logic handled explicitly
+      if (qty === 0) return sum; 
       const weight = getRecordWeight(log.tamanho_peca);
       return sum + (qty * weight);
     }, 0);
@@ -235,7 +241,7 @@ export const getReportDataByDateRange = (logs, groupBy = 'day') => {
 export const getProblemsFrequency = (logs) => {
   const problems = logs.reduce((acc, log) => {
     const qty = parseInt(log.quantidade) || 0;
-    if (qty === 0) return acc; // Skip zero-rework logs
+    if (qty === 0) return acc; 
     const prob = log.problema || 'Não Informado';
     if (!acc[prob]) acc[prob] = 0;
     acc[prob] += qty;
@@ -258,7 +264,7 @@ export const getProblemsFrequencyByClient = (logs) => {
 
   logs.forEach(log => {
     const qty = parseInt(log.quantidade) || 0;
-    if (qty === 0) return; // Skip zero-rework logs
+    if (qty === 0) return; 
 
     const prob = log.problema || 'Não Informado';
     const client = log.client_name || log.cliente || 'Não Informado';
@@ -294,7 +300,7 @@ export const getProblemsFrequencyByClient = (logs) => {
 export const getSolutionsByProblem = (logs) => {
   const solutions = logs.reduce((acc, log) => {
     const qty = parseInt(log.quantidade) || 0;
-    if (qty === 0) return acc; // Skip zero-rework logs
+    if (qty === 0) return acc; 
     const prob = log.problema || 'Não Informado';
     const sol = log.analysis_conclusion || 'Sem conclusão';
     if (!acc[prob]) acc[prob] = {};
@@ -314,7 +320,6 @@ export const getFilterOptions = async () => {
   if (error) throw error;
   
   const cabines = [...new Set(data.map(d => d.cabine).filter(Boolean))].sort();
-  // Normalize painters to consolidate duplicated cases like "Luiz" and "luiz"
   const pintores = [...new Set(data.map(d => normalizePainterName(d.pintor)).filter(p => p !== 'Sem Pintor'))].sort();
   const clientes = [...new Set(data.map(d => d.client_name).filter(c => c && c !== 'SEM RETRABALHO'))].sort();
   const cores = [...new Set(data.map(d => d.cor).filter(Boolean))].sort();
@@ -403,7 +408,7 @@ export const getWeightedMetricsForAllCabines = async (startOrRange, endStr) => {
 
     logs.forEach(log => {
       const qty = parseInt(log.quantidade) || 0;
-      if (qty === 0) return; // Ignore zero rework for cabine metrics
+      if (qty === 0) return; 
       
       const cab = log.cabine || 'Sem Cabine';
       if (!cabineMap[cab]) {

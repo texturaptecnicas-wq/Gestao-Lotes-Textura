@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, DollarSign, Loader2 } from 'lucide-react';
@@ -114,6 +115,7 @@ const FinanceModal = ({ isOpen, onClose, onSave, recordToEdit }) => {
                   <option value="Despesa">Despesa Operacional</option>
                   <option value="Salário">Salário</option>
                   <option value="Imposto">Imposto</option>
+                  <option value="Nota Fiscal (Transmissão)">Nota Fiscal (Transmissão)</option>
                   <option value="Outros">Outros</option>
                 </select>
               </div>

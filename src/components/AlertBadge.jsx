@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { AlertTriangle, Palette, CheckCircle, Edit, Eye } from 'lucide-react';
 
@@ -10,7 +11,7 @@ const AlertBadge = ({ alert, isAdmin, onDeactivate, isModal = false, onEdit, onV
       <div className="flex-1 min-w-0">
         <div className="flex justify-between items-start">
           <h4 className="text-sm font-bold text-red-100">
-            {isModal ? alert.client_name : 'Alerta de Qualidade'}
+            {isModal ? (alert.client_name || 'Alerta Global (Cor)') : 'Alerta de Qualidade'}
           </h4>
           
           <div className="flex items-center gap-1">

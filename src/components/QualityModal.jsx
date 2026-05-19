@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, CheckCircle, Plus, Loader2, ListTodo, ShieldAlert, Camera, UploadCloud, Trash2, PieChart, Maximize, Minimize } from 'lucide-react';

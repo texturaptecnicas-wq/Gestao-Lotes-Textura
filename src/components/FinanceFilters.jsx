@@ -1,7 +1,8 @@
-import React from 'react';
-import { Filter, Calendar, Tag, Activity } from 'lucide-react';
 
-const FinanceFilters = ({ filters, onFilterChange }) => {
+import React from 'react';
+import { Filter, Calendar, ArrowDownUp, Tag } from 'lucide-react';
+
+const FinanceFilters = ({ filters, onFilterChange, availableCategories = [] }) => {
   const handleChange = (key, value) => {
     onFilterChange({ ...filters, [key]: value });
   };
@@ -31,10 +32,26 @@ const FinanceFilters = ({ filters, onFilterChange }) => {
 
       <div className="w-full md:w-auto">
         <label className="flex items-center gap-2 text-sm font-medium text-slate-400 mb-1.5">
+          <Tag className="w-4 h-4" /> Categoria
+        </label>
+        <select 
+          value={filters.categoria || 'todos'} 
+          onChange={(e) => handleChange('categoria', e.target.value)}
+          className="w-full md:w-48 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-sky-500"
+        >
+          <option value="todos">Todas</option>
+          {availableCategories.map(cat => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="w-full md:w-auto">
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-400 mb-1.5">
           <Filter className="w-4 h-4" /> Tipo
         </label>
         <select 
-          value={filters.tipo} 
+          value={filters.tipo || 'todos'} 
           onChange={(e) => handleChange('tipo', e.target.value)}
           className="w-full md:w-36 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-sky-500"
         >
@@ -46,17 +63,16 @@ const FinanceFilters = ({ filters, onFilterChange }) => {
 
       <div className="w-full md:w-auto">
         <label className="flex items-center gap-2 text-sm font-medium text-slate-400 mb-1.5">
-          <Activity className="w-4 h-4" /> Status
+          <ArrowDownUp className="w-4 h-4" /> Ordenar por Valor
         </label>
         <select 
-          value={filters.status} 
-          onChange={(e) => handleChange('status', e.target.value)}
-          className="w-full md:w-36 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-sky-500"
+          value={filters.sortByValue || 'none'} 
+          onChange={(e) => handleChange('sortByValue', e.target.value)}
+          className="w-full md:w-48 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-sky-500"
         >
-          <option value="todos">Todos</option>
-          <option value="confirmado">Confirmado</option>
-          <option value="pendente">Pendente</option>
-          <option value="cancelado">Cancelado</option>
+          <option value="none">Padrão (Por Data)</option>
+          <option value="desc">Maior para Menor</option>
+          <option value="asc">Menor para Maior</option>
         </select>
       </div>
     </div>

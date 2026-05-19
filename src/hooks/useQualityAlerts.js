@@ -1,48 +1,54 @@
-import { useState, useEffect } from 'react';
-import { getAlertsByClient } from '@/services/qualityService';
 
-export const useQualityAlerts = (clientName) => {
-  const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading] = useState(true);
+import { useState, useEffect } from 'react';
+import { getAllAlerts } from '@/services/qualityService';
+
+let globalAlertsCache = null;
+let globalAlertsPromise = null;
+
+export const useQualityAlerts = () => {
+  const [alerts, setAlerts] = useState(globalAlertsCache || []);
+  const [loading, setLoading] = useState(!globalAlertsCache);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
 
-    const fetchAlerts = async () => {
-      if (!clientName) {
-        if (isMounted) {
-          setAlerts([]);
-          setLoading(false);
-        }
-        return;
-      }
+    if (globalAlertsCache) {
+      setAlerts(globalAlertsCache);
+      setLoading(false);
+      return;
+    }
 
-      try {
-        setLoading(true);
-        const data = await getAlertsByClient(clientName);
+    if (!globalAlertsPromise) {
+      globalAlertsPromise = getAllAlerts().then(data => {
+        globalAlertsCache = data;
+        return data;
+      }).catch(err => {
+        globalAlertsPromise = null;
+        throw err;
+      });
+    }
+
+    globalAlertsPromise
+      .then(data => {
         if (isMounted) {
           setAlerts(data);
           setError(null);
+          setLoading(false);
         }
-      } catch (err) {
+      })
+      .catch(err => {
         if (isMounted) {
           setError(err);
           console.error("Error in useQualityAlerts hook:", err);
-        }
-      } finally {
-        if (isMounted) {
           setLoading(false);
         }
-      }
-    };
-
-    fetchAlerts();
+      });
 
     return () => {
       isMounted = false;
     };
-  }, [clientName]);
+  }, []);
 
   return { alerts, loading, error };
 };
