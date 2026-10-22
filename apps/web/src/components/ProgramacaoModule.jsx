@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, ChevronRight, Calendar, Trash2, ArrowUp, ArrowDown,
-  CheckCircle2, Loader2, MoveRight, AlertCircle, Repeat, ArrowLeftRight,
+  CheckCircle2, Loader2, MoveRight, AlertCircle, Repeat, ArrowLeftRight, Star, FileDown,
 } from 'lucide-react';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType, WidthType, BorderStyle, Table, TableRow, TableCell } from 'docx';
 import { supabase } from '@/lib/customSupabaseClient';
 import { toast } from '@/components/ui/use-toast';
 import { todayISO, shiftDate, formatDisplay } from '@/utils/dateUtils';
@@ -247,6 +248,162 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
     }
   };
 
+  // Marca/desmarca todos os lotes do grupo de cliente como "promessa para
+  // hoje". O destaque aparece no quadro e no PDF (sem negrito, reservado às
+  // cores). Persistido no campo `promessa` do lote; o realtime do App propaga.
+  const togglePromessa = async (cg) => {
+    const loteIds = cg.items.map(it => it.lote_id);
+    const anyPromessa = cg.items.some(it => lotesById.get(it.lote_id)?.promessa === true);
+    const newValue = !anyPromessa;
+    const key = `${cg.cliente}-${cg.items[0]?.cabine}-${cg.items[0]?.ordem_cor}`;
+    setBusyId(`promessa-${key}`);
+    try {
+      await Promise.all(
+        loteIds.map(id => supabase.from('lotes').update({ promessa: newValue, updated_at: new Date().toISOString() }).eq('id', id))
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  // Gera um documento Word (.docx) fiel à programação exibida no momento
+  // (cabines, cores em negrito, clientes em sequência e destaques de
+  // promessa sem negrito). Página A4, título centralizado e conteúdo em
+  // duas colunas. O documento é sempre gerado a partir do estado atual,
+  // refletindo qualquer alteração feita na programação.
+  const generateWord = useCallback(async () => {
+    // Monta a lista plana de grupos de cor (cada um com suas linhas de
+    // cliente), preservando a ordem cabine → cor → cliente do quadro.
+    const groups = [];
+    CABINES.forEach((cab) => {
+      const cabGroups = board[cab];
+      if (!cabGroups || cabGroups.length === 0) return;
+      cabGroups.forEach((group) => {
+        const lines = group.clientGroups.map((cg) => {
+          const lotesArr = cg.items.map((it) => lotesById.get(it.lote_id));
+          const isPromessa = lotesArr.some((l) => l?.promessa === true);
+          const totalPecas = lotesArr.reduce((s, l) => s + (l?.quantidade || 0), 0);
+          let label = `${cg.cliente}`;
+          if (totalPecas) label += `  —  ${totalPecas} peça${totalPecas > 1 ? 's' : ''}`;
+          if (cg.items.length > 1) label += `  (${cg.items.length} lotes)`;
+          return { label, isPromessa };
+        });
+        groups.push({ cabine: cab, cor: group.cor, lines });
+      });
+    });
+
+    // Constrói os parágrafos de uma coluna (lista de grupos). O cabeçalho
+    // de cabine aparece sempre que a cabine muda dentro da coluna.
+    const buildColumnParas = (colGroups) => {
+      const paras = [];
+      let lastCabine = null;
+      colGroups.forEach((g) => {
+        if (g.cabine !== lastCabine) {
+          // Espaço visual entre a última cor de uma cabine e o título da
+          // próxima cabine (antes do primeiro título não há espaço).
+          if (lastCabine !== null) {
+            paras.push(new Paragraph({
+              spacing: { before: 0, after: 120 },
+              children: [new TextRun({ text: '', size: 16 })],
+            }));
+          }
+          paras.push(new Paragraph({
+            spacing: { before: 0, after: 80 },
+            children: [new TextRun({ text: `Cabine ${g.cabine}`, bold: true, size: 36, font: 'Arial' })], // Arial 18pt negrito
+          }));
+          lastCabine = g.cabine;
+        }
+        paras.push(new Paragraph({
+          spacing: { before: 40, after: 20 },
+          children: [new TextRun({ text: g.cor, bold: true, size: 36, font: 'Arial' })], // Arial 18pt negrito
+        }));
+        g.lines.forEach((ln) => {
+          const text = ln.isPromessa ? `★ ${ln.label}` : ln.label;
+          paras.push(new Paragraph({
+            spacing: { after: 20 },
+            shading: ln.isPromessa ? { type: ShadingType.CLEAR, color: 'auto', fill: 'FFF37F' } : undefined,
+            children: [new TextRun({ text, size: 32, font: 'Arial' })], // Arial 16pt, sem negrito
+          }));
+        });
+      });
+      return paras;
+    };
+
+    // Distribui os grupos em duas colunas balanceadas por número de linhas,
+    // mantendo grupos de cor inteiros (sem quebrar no meio).
+    const groupWeight = (g) => 1 + g.lines.length;
+    const totalWeight = groups.reduce((s, g) => s + groupWeight(g), 0);
+    let acc = 0;
+    let splitIdx = groups.length;
+    for (let i = 0; i < groups.length; i++) {
+      acc += groupWeight(groups[i]);
+      if (acc >= totalWeight / 2) { splitIdx = i + 1; break; }
+    }
+    const leftGroups = groups.slice(0, splitIdx);
+    const rightGroups = groups.slice(splitIdx);
+
+    // Título centralizado, em negrito, ocupando toda a largura da página
+    // acima da tabela de duas colunas.
+    const titlePara = new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 240 },
+      children: [
+        new TextRun({
+          text: `Programação — ${formatDisplay(date)} (${date})`,
+          bold: true,
+          size: 40, // 20pt
+          font: 'Arial',
+        }),
+      ],
+    });
+
+    // Tabela invisível de duas colunas para o layout lado a lado.
+    const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+    const cellOpts = {
+      margins: { top: 20, bottom: 20, left: 40, right: 40 },
+      borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
+    };
+
+    const table = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      columnWidths: [5233, 5233],
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({ ...cellOpts, children: buildColumnParas(leftGroups) }),
+            new TableCell({ ...cellOpts, children: buildColumnParas(rightGroups) }),
+          ],
+        }),
+      ],
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 11906, height: 16838 }, // A4 (twips)
+            margin: { top: 720, bottom: 720, left: 720, right: 720 },
+          },
+        },
+        children: [titlePara, table],
+      }],
+    });
+
+    try {
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `programacao-${date}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({ title: 'Erro ao gerar Word', description: err?.message || 'Não foi possível gerar o documento.', variant: 'destructive' });
+    }
+  }, [board, lotesById, date]);
+
   // --- Movimento de cliente individual para outra cabine/cor ---
   const startMove = (cg) => {
     setMovingId(`${cg.cliente}-${cg.items[0]?.cabine}-${cg.items[0]?.ordem_cor}`);
@@ -387,6 +544,10 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
             Voltar para hoje
           </motion.button>
         )}
+        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={generateWord} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-lg shadow-amber-500/20" title="Gerar Word da programação">
+          <FileDown className="w-4 h-4" />
+          <span className="hidden sm:inline">Word</span>
+        </motion.button>
         <span className="text-xs text-slate-400 ml-auto">
           {isToday ? 'Programação do dia' : 'Consulta / edição de programação anterior'}
         </span>
@@ -486,7 +647,9 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                             const paintBusy = busyId === `paint-${moveKey}`;
                             const removeBusy = busyId === `remove-${moveKey}`;
                             const repeatBusy = busyId === `repeat-${moveKey}`;
+                            const promessaBusy = busyId === `promessa-${moveKey}`;
                             const groupPainted = cg.items.every(it => isLotePainted(it.lote_id));
+                            const groupPromessa = cg.items.some(it => lotesById.get(it.lote_id)?.promessa === true);
                             const firstLote = cg.items[0] ? lotesById.get(cg.items[0].lote_id) : null;
                             const totalPecas = cg.items.reduce((s, it) => {
                               const l = lotesById.get(it.lote_id);
@@ -496,7 +659,7 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                               <motion.div
                                 key={`${cg.cliente}-${ci}`}
                                 layout
-                                className={`rounded-lg p-2 border ${groupPainted ? 'bg-emerald-500/15 border-emerald-500/50' : 'bg-slate-800/70 border-slate-700/60'}`}
+                                className={`rounded-lg p-2 border ${groupPromessa ? 'bg-amber-500/15 border-amber-400/60 ring-1 ring-amber-400/40' : groupPainted ? 'bg-emerald-500/15 border-emerald-500/50' : 'bg-slate-800/70 border-slate-700/60'}`}
                               >
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="min-w-0 flex-1">
@@ -513,6 +676,9 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                                       {groupPainted && (
                                         <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Pintado</span>
                                       )}
+                                      {groupPromessa && (
+                                        <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1"><Star className="w-3 h-3" fill="currentColor" />Promessa</span>
+                                      )}
                                       {cg.items.length > 1 && (
                                         <span className="text-[10px] font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded-full">{cg.items.length} lotes</span>
                                       )}
@@ -526,6 +692,9 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                                   <div className="flex items-center gap-1">
                                     <button onClick={() => startMove(cg)} className="p-1 rounded hover:bg-slate-700/60 text-indigo-300" title="Mover para outra cabine/cor">
                                       <MoveRight className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={() => togglePromessa(cg)} disabled={promessaBusy} className={`p-1 rounded hover:bg-amber-500/20 ${groupPromessa ? 'text-amber-300 bg-amber-500/15' : 'text-amber-400/70'}`} title="Marcar como promessa para hoje">
+                                      {promessaBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Star className="w-3.5 h-3.5" fill={groupPromessa ? 'currentColor' : 'none'} />}
                                     </button>
                                     {!groupPainted && (
                                       <button onClick={() => repeatToNextDay(cg)} disabled={repeatBusy} className="p-1 rounded hover:bg-sky-500/20 text-sky-300 disabled:opacity-50" title="Repetir cliente amanhã">
