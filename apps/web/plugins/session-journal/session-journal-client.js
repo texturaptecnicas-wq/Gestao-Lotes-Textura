@@ -3,10 +3,11 @@ import { postToParent } from '../visual-editor/utils/parent-frame.js';
 const EVENT = 'sessionJournalEvents';
 const MAX_TEXT = 2000;
 const MAX_BATCH = 50;
-// Errors must land before the AI reads the journal after a reload; the rest is batched to limit backend writes.
-const ERROR_FLUSH_MS = 1000;
+// Errors must land before the AI reads the journal after a reload, and the page load tells it the app
+// is up so it can stop waiting; the rest is batched to limit backend writes.
+const FAST_FLUSH_MS = 1000;
 const FLUSH_INTERVAL_MS = 10000;
-const ERROR_KINDS = new Set(['console.error', 'window.error', 'unhandledrejection', 'root.empty', 'network.error']);
+const FAST_FLUSH_KINDS = new Set(['load', 'console.error', 'window.error', 'unhandledrejection', 'root.empty', 'network.error']);
 
 const enabled = window.parent !== window;
 
@@ -50,7 +51,7 @@ function send(kind, data) {
   if (queue.length >= MAX_BATCH) {
     flushQueue();
   } else {
-    scheduleFlush(ERROR_KINDS.has(kind) ? ERROR_FLUSH_MS : FLUSH_INTERVAL_MS);
+    scheduleFlush(FAST_FLUSH_KINDS.has(kind) ? FAST_FLUSH_MS : FLUSH_INTERVAL_MS);
   }
 }
 

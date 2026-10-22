@@ -380,10 +380,15 @@ function LotesManager() {
     return saved;
   };
 
-  const handleProgramarLote = useCallback(async (lote, { data, cabine, cor }) => {
+  const handleProgramarLote = useCallback(async (lote, { data, cabine, cor, mode = 'join', targetOrdemCor = null }) => {
     const cabineNum = Number(cabine);
     const corTrim = (cor || '').trim();
     if (!corTrim) { toast({ title: 'Cor obrigatória', variant: 'destructive' }); return false; }
+    // Normaliza a cor para comparar ignorando maiúsculas/minúsculas e espaços
+    // extras, de modo que um novo cliente entre no grupo da cor já existente
+    // (ex: "preto tx" == "Preto TX") em vez de criar um subconjunto separado.
+    const normCor = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const corNorm = normCor(corTrim);
     const { data: existing, error: fetchErr } = await supabase
       .from('programacao')
       .select('cor, ordem_cor, ordem_cliente, cliente')
@@ -391,9 +396,29 @@ function LotesManager() {
       .eq('cabine', cabineNum);
     if (fetchErr) { toast({ title: 'Erro ao programar', description: fetchErr.message, variant: 'destructive' }); return false; }
     const rows = existing || [];
-    const sameColor = rows.filter(r => r.cor === corTrim);
+    const sameColor = rows.filter(r => normCor(r.cor) === corNorm);
+    // Usa a forma canônica já armazenada da cor quando ela existe, garantindo
+    // agrupamento consistente no quadro de programação.
+    const canonicalCor = sameColor.length > 0 ? sameColor[0].cor : corTrim;
     let ordem_cor; let ordem_cliente;
-    if (sameColor.length > 0) {
+    if (mode === 'sequence') {
+      // "Seguir sequência": ignora subconjuntos existentes dessa cor e cria um
+      // novo subconjunto no final da sequência da cabine.
+      ordem_cor = (rows.reduce((m, r) => Math.max(m, r.ordem_cor), -1)) + 1;
+      ordem_cliente = 0;
+    } else if (targetOrdemCor !== null && targetOrdemCor !== undefined) {
+      // Entrar em um subconjunto específico escolhido manualmente.
+      const subsetRows = sameColor.filter(r => r.ordem_cor === targetOrdemCor);
+      const targetRows = subsetRows.length > 0 ? subsetRows : sameColor;
+      ordem_cor = targetRows[0].ordem_cor;
+      const sameClient = targetRows.filter(r => r.cliente === lote.cliente);
+      if (sameClient.length > 0) {
+        ordem_cliente = sameClient[0].ordem_cliente;
+      } else {
+        ordem_cliente = (targetRows.reduce((m, r) => Math.max(m, r.ordem_cliente), -1)) + 1;
+      }
+    } else if (sameColor.length > 0) {
+      // Comportamento padrão: agrupa no subconjunto existente da cor.
       ordem_cor = sameColor[0].ordem_cor;
       const sameClient = sameColor.filter(r => r.cliente === lote.cliente);
       if (sameClient.length > 0) {
@@ -406,7 +431,7 @@ function LotesManager() {
       ordem_cliente = 0;
     }
     const { error: insertErr } = await supabase.from('programacao').insert({
-      data, lote_id: lote.id, cabine: cabineNum, cor: corTrim, ordem_cor, ordem_cliente, cliente: lote.cliente, ativo: true,
+      data, lote_id: lote.id, cabine: cabineNum, cor: canonicalCor, ordem_cor, ordem_cliente, cliente: lote.cliente, ativo: true,
     });
     if (insertErr) {
       if (insertErr.code === '23505') toast({ title: 'Lote já programado', description: 'Este lote já está programado nesta data.', variant: 'destructive' });
