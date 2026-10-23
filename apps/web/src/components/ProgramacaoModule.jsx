@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, ChevronRight, Calendar, Trash2, ArrowUp, ArrowDown,
-  CheckCircle2, Loader2, MoveRight, AlertCircle, Repeat, ArrowLeftRight, Star, FileDown,
+  CheckCircle2, Loader2, MoveRight, AlertCircle, Repeat, ArrowLeftRight, Star, FileDown, Eye,
 } from 'lucide-react';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType, WidthType, BorderStyle, Table, TableRow, TableCell } from 'docx';
 import { supabase } from '@/lib/customSupabaseClient';
 import { toast } from '@/components/ui/use-toast';
 import { todayISO, shiftDate, formatDisplay } from '@/utils/dateUtils';
+import ProgramacaoPhotosModal from '@/components/ProgramacaoPhotosModal';
 
 const CABINES = [1, 2, 3, 4];
 
@@ -29,6 +30,38 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
   // Movimento de subconjunto inteiro de cor para outra cabine.
   const [movingSubsetKey, setMovingSubsetKey] = useState(null);
   const [subsetTargetCabine, setSubsetTargetCabine] = useState(1);
+  // Visualização das fotos vinculadas aos lotes do cliente.
+  const [photosModal, setPhotosModal] = useState({ open: false, cliente: '', photos: [] });
+  const [photosBusyKey, setPhotosBusyKey] = useState(null);
+
+  // Reúne as fotos de todos os lotes do grupo de cliente e abre o modal.
+  // Se houver mais de um lote do mesmo cliente, todas as fotos aparecem juntas.
+  const openClientPhotos = async (cg) => {
+    const key = `photos-${cg.cliente}-${cg.items[0]?.cabine}-${cg.items[0]?.ordem_cor}`;
+    setPhotosBusyKey(key);
+    try {
+      const lotesArr = cg.items
+        .map((it) => lotesById.get(it.lote_id))
+        .filter(Boolean);
+      const comFoto = lotesArr.filter((l) => l.foto);
+      if (comFoto.length === 0) {
+        toast({ title: 'Sem fotos', description: 'Nenhuma foto vinculada aos lotes deste cliente.' });
+        return;
+      }
+      const photos = comFoto.map((l) => {
+        const { data } = supabase.storage.from('fotos-lotes').getPublicUrl(l.foto);
+        return {
+          url: `${data.publicUrl}?t=${new Date().getTime()}`,
+          cliente: l.cliente,
+          cor: l.cor,
+          quantidade: l.quantidade,
+        };
+      });
+      setPhotosModal({ open: true, cliente: cg.cliente, photos });
+    } finally {
+      setPhotosBusyKey(null);
+    }
+  };
 
   const fetchEntries = useCallback(async () => {
     setLoading(true);
@@ -696,6 +729,9 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                                     <button onClick={() => togglePromessa(cg)} disabled={promessaBusy} className={`p-1 rounded hover:bg-amber-500/20 ${groupPromessa ? 'text-amber-300 bg-amber-500/15' : 'text-amber-400/70'}`} title="Marcar como promessa para hoje">
                                       {promessaBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Star className="w-3.5 h-3.5" fill={groupPromessa ? 'currentColor' : 'none'} />}
                                     </button>
+                                    <button onClick={() => openClientPhotos(cg)} disabled={photosBusyKey === `photos-${cg.cliente}-${cg.items[0]?.cabine}-${cg.items[0]?.ordem_cor}`} className="p-1 rounded hover:bg-sky-500/20 text-sky-300 disabled:opacity-50" title="Ver fotos dos lotes do cliente">
+                                      {photosBusyKey === `photos-${cg.cliente}-${cg.items[0]?.cabine}-${cg.items[0]?.ordem_cor}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                                    </button>
                                     {!groupPainted && (
                                       <button onClick={() => repeatToNextDay(cg)} disabled={repeatBusy} className="p-1 rounded hover:bg-sky-500/20 text-sky-300 disabled:opacity-50" title="Repetir cliente amanhã">
                                         {repeatBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Repeat className="w-3.5 h-3.5" />}
@@ -743,6 +779,13 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
           })}
         </div>
       )}
+
+      <ProgramacaoPhotosModal
+        isOpen={photosModal.open}
+        onClose={() => setPhotosModal({ open: false, cliente: '', photos: [] })}
+        cliente={photosModal.cliente}
+        photos={photosModal.photos}
+      />
 
       <div className="glass-effect rounded-xl p-3 flex items-start gap-2 text-xs text-slate-400">
         <AlertCircle className="w-4 h-4 text-sky-300 flex-shrink-0 mt-0.5" />

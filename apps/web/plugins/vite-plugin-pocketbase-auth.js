@@ -9,6 +9,9 @@ export default function pocketbaseAuthPlugin() {
                     "https://horizons.hostinger.dev",
                     "https://ai-builder.hostinger.com",
                     "https://ai-builder.hostinger.dev",
+                    "https://hpanel.hostinger.com",
+                    "https://hpanel.hostinger.dev",
+                    "https://chatbot-local.hostinger.dev",
                     "https://horizons-frontend-local.hostinger.dev",
                 ];
                 const getParentOrigin = () => {

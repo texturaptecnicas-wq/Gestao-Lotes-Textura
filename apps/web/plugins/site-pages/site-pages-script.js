@@ -8,6 +8,9 @@ const ALLOWED_PARENT_ORIGINS = [
 	'https://horizons.hostinger.dev',
 	'https://ai-builder.hostinger.com',
 	'https://ai-builder.hostinger.dev',
+	'https://hpanel.hostinger.com',
+	'https://hpanel.hostinger.dev',
+	'https://chatbot-local.hostinger.dev',
 	'https://horizons-frontend-local.hostinger.dev',
 	'http://localhost:4000',
 ];
