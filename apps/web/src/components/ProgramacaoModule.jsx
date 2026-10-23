@@ -626,9 +626,9 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                         exit={{ opacity: 0, scale: 0.95 }}
                         className="rounded-xl border border-slate-700/60 bg-slate-900/40 overflow-hidden"
                       >
-                        <div className="flex items-center justify-between px-3 py-2 bg-slate-800/60">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="flex flex-col">
+                        <div className="flex items-start justify-between gap-2 px-3 py-2 bg-slate-800/60">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <div className="flex flex-col shrink-0">
                               <button onClick={() => moveColor(cab, group.ordem_cor, -1)} disabled={gi === 0} className="disabled:opacity-30 hover:text-sky-300">
                                 <ArrowUp className="w-3 h-3" />
                               </button>
@@ -636,10 +636,12 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                                 <ArrowDown className="w-3 h-3" />
                               </button>
                             </div>
-                            <span className="font-semibold text-sm truncate" title={group.cor}>{group.cor}</span>
-                            {sameColorCount > 1 && (
-                              <span className="text-[10px] font-bold text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded-full">subconj. {gi + 1}</span>
-                            )}
+                            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                              <span className="font-semibold text-sm break-words" title={group.cor}>{group.cor}</span>
+                              {sameColorCount > 1 && (
+                                <span className="text-[10px] font-bold text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded-full">subconj. {gi + 1}</span>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-slate-400">{group.clientGroups.length} cliente{group.clientGroups.length > 1 ? 's' : ''}</span>
@@ -694,10 +696,10 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                                 layout
                                 className={`rounded-lg p-2 border ${groupPromessa ? 'bg-amber-500/15 border-amber-400/60 ring-1 ring-amber-400/40' : groupPainted ? 'bg-emerald-500/15 border-emerald-500/50' : 'bg-slate-800/70 border-slate-700/60'}`}
                               >
-                                <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-start justify-between gap-2">
                                   <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex flex-col">
+                                    <div className="flex items-start gap-2">
+                                      <div className="flex flex-col shrink-0">
                                         <button onClick={() => moveClient(cab, group.ordem_cor, cg.cliente, -1)} disabled={ci === 0} className="disabled:opacity-30 hover:text-sky-300">
                                           <ArrowUp className="w-3 h-3" />
                                         </button>
@@ -705,24 +707,26 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                                           <ArrowDown className="w-3 h-3" />
                                         </button>
                                       </div>
-                                      <p className={`font-semibold text-sm truncate ${groupPainted ? 'text-emerald-300' : ''}`}>{cg.cliente}</p>
-                                      {groupPainted && (
-                                        <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Pintado</span>
-                                      )}
-                                      {groupPromessa && (
-                                        <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1"><Star className="w-3 h-3" fill="currentColor" />Promessa</span>
-                                      )}
-                                      {cg.items.length > 1 && (
-                                        <span className="text-[10px] font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded-full">{cg.items.length} lotes</span>
-                                      )}
+                                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                        <p className={`font-semibold text-sm break-words ${groupPainted ? 'text-emerald-300' : ''}`}>{cg.cliente}</p>
+                                        {groupPainted && (
+                                          <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Pintado</span>
+                                        )}
+                                        {groupPromessa && (
+                                          <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full flex items-center gap-1"><Star className="w-3 h-3" fill="currentColor" />Promessa</span>
+                                        )}
+                                        {cg.items.length > 1 && (
+                                          <span className="text-[10px] font-bold text-sky-300 bg-sky-500/10 px-2 py-0.5 rounded-full">{cg.items.length} lotes</span>
+                                        )}
+                                      </div>
                                     </div>
-                                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                                    <p className="text-xs text-slate-400 mt-0.5 break-words">
                                       {totalPecas ? `${totalPecas} peças` : ''}
                                       {firstLote?.medida === 'ok' ? ' · Medido' : ''}
                                       {firstLote?.pago === 'ok' ? ' · Pago' : ''}
                                     </p>
                                   </div>
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                                     <button onClick={() => startMove(cg)} className="p-1 rounded hover:bg-slate-700/60 text-indigo-300" title="Mover para outra cabine/cor">
                                       <MoveRight className="w-3.5 h-3.5" />
                                     </button>
