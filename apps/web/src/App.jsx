@@ -733,7 +733,7 @@ function LotesManager() {
                   <motion.div key={filterStatus}>
                     {filterStatus === 'programado' ? (
                       <Suspense fallback={<LoadingFallback />}>
-                        <ProgramacaoModule lotes={lotes} onPaintLote={handlePaintFromProgramacao} onRemoveFromProgramacao={handleRemoveFromProgramacao} userRole={userRole} />
+                        <ProgramacaoModule lotes={lotes} onPaintLote={handlePaintFromProgramacao} onRemoveFromProgramacao={handleRemoveFromProgramacao} userRole={userRole} now={now} onUpdateStatus={handleUpdateLoteStatus} onMarcarEntregue={handleMarcarEntregue} onDelete={handleDeleteLote} onEdit={handleOpenEditModal} onProgramar={handleOpenProgramar} onOpenFinanceIntegration={handleOpenFinanceIntegration} />
                       </Suspense>
                     ) : loadingLotes && lotes.length === 0 ? (
                       <div className="text-center p-12 glass-effect rounded-2xl"><Package className="w-16 h-16 mx-auto mb-4 text-slate-500 animate-pulse" /><h3 className="text-2xl font-bold mb-2">Carregando lotes...</h3><p className="text-slate-400">Só um momento, estamos buscando os dados.</p></div>

@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, ChevronRight, Calendar, Trash2, ArrowUp, ArrowDown,
-  CheckCircle2, Loader2, MoveRight, AlertCircle, Repeat, ArrowLeftRight, Star, FileDown, Eye,
+  CheckCircle2, Loader2, MoveRight, AlertCircle, Repeat, ArrowLeftRight, Star, FileDown, CreditCard,
 } from 'lucide-react';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, ShadingType, WidthType, BorderStyle, Table, TableRow, TableCell } from 'docx';
 import { supabase } from '@/lib/customSupabaseClient';
 import { toast } from '@/components/ui/use-toast';
 import { todayISO, shiftDate, formatDisplay } from '@/utils/dateUtils';
-import ProgramacaoPhotosModal from '@/components/ProgramacaoPhotosModal';
+import ProgramacaoCardsModal from '@/components/ProgramacaoCardsModal';
 
 const CABINES = [1, 2, 3, 4];
 
@@ -16,7 +16,7 @@ const CABINES = [1, 2, 3, 4];
 // (ex: "preto tx" == "Preto TX") em um único grupo da programação.
 const normCor = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
-const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
+const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit, onProgramar, onOpenFinanceIntegration }) => {
   const [date, setDate] = useState(todayISO());
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,37 +30,21 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
   // Movimento de subconjunto inteiro de cor para outra cabine.
   const [movingSubsetKey, setMovingSubsetKey] = useState(null);
   const [subsetTargetCabine, setSubsetTargetCabine] = useState(1);
-  // Visualização das fotos vinculadas aos lotes do cliente.
-  const [photosModal, setPhotosModal] = useState({ open: false, cliente: '', photos: [] });
-  const [photosBusyKey, setPhotosBusyKey] = useState(null);
+  // Visualização dos cards completos dos lotes do cliente, com acesso a
+  // todas as funcionalidades do card (ver foto, status, editar, entregar…).
+  const [cardsModal, setCardsModal] = useState({ open: false, cliente: '', lotes: [] });
 
-  // Reúne as fotos de todos os lotes do grupo de cliente e abre o modal.
-  // Se houver mais de um lote do mesmo cliente, todas as fotos aparecem juntas.
-  const openClientPhotos = async (cg) => {
-    const key = `photos-${cg.cliente}-${cg.items[0]?.cabine}-${cg.items[0]?.ordem_cor}`;
-    setPhotosBusyKey(key);
-    try {
-      const lotesArr = cg.items
-        .map((it) => lotesById.get(it.lote_id))
-        .filter(Boolean);
-      const comFoto = lotesArr.filter((l) => l.foto);
-      if (comFoto.length === 0) {
-        toast({ title: 'Sem fotos', description: 'Nenhuma foto vinculada aos lotes deste cliente.' });
-        return;
-      }
-      const photos = comFoto.map((l) => {
-        const { data } = supabase.storage.from('fotos-lotes').getPublicUrl(l.foto);
-        return {
-          url: `${data.publicUrl}?t=${new Date().getTime()}`,
-          cliente: l.cliente,
-          cor: l.cor,
-          quantidade: l.quantidade,
-        };
-      });
-      setPhotosModal({ open: true, cliente: cg.cliente, photos });
-    } finally {
-      setPhotosBusyKey(null);
+  // Reúne os lotes do grupo de cliente e abre o modal de cards. Se houver
+  // mais de um lote do mesmo cliente, todos os cards aparecem juntos.
+  const openClientCards = (cg) => {
+    const lotesArr = cg.items
+      .map((it) => lotesById.get(it.lote_id))
+      .filter(Boolean);
+    if (lotesArr.length === 0) {
+      toast({ title: 'Sem lotes', description: 'Nenhum lote vinculado a este cliente.' });
+      return;
     }
+    setCardsModal({ open: true, cliente: cg.cliente, lotes: lotesArr });
   };
 
   const fetchEntries = useCallback(async () => {
@@ -733,8 +717,8 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                                     <button onClick={() => togglePromessa(cg)} disabled={promessaBusy} className={`p-1 rounded hover:bg-amber-500/20 ${groupPromessa ? 'text-amber-300 bg-amber-500/15' : 'text-amber-400/70'}`} title="Marcar como promessa para hoje">
                                       {promessaBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Star className="w-3.5 h-3.5" fill={groupPromessa ? 'currentColor' : 'none'} />}
                                     </button>
-                                    <button onClick={() => openClientPhotos(cg)} disabled={photosBusyKey === `photos-${cg.cliente}-${cg.items[0]?.cabine}-${cg.items[0]?.ordem_cor}`} className="p-1 rounded hover:bg-sky-500/20 text-sky-300 disabled:opacity-50" title="Ver fotos dos lotes do cliente">
-                                      {photosBusyKey === `photos-${cg.cliente}-${cg.items[0]?.cabine}-${cg.items[0]?.ordem_cor}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                                    <button onClick={() => openClientCards(cg)} className="p-1 rounded hover:bg-sky-500/20 text-sky-300" title="Ver card completo do lote">
+                                      <CreditCard className="w-3.5 h-3.5" />
                                     </button>
                                     {!groupPainted && (
                                       <button onClick={() => repeatToNextDay(cg)} disabled={repeatBusy} className="p-1 rounded hover:bg-sky-500/20 text-sky-300 disabled:opacity-50" title="Repetir cliente amanhã">
@@ -742,8 +726,8 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
                                       </button>
                                     )}
                                     {!groupPainted && (
-                                      <button onClick={() => paintGroup(cg)} disabled={paintBusy} className="p-1 rounded hover:bg-green-500/20 text-green-400 disabled:opacity-50" title="Marcar como pintado">
-                                        {paintBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                      <button onClick={() => paintGroup(cg)} disabled={paintBusy} className="ml-1.5 min-h-14 min-w-14 sm:min-h-11 sm:min-w-11 p-2.5 rounded-lg hover:bg-green-500/20 text-green-400 disabled:opacity-50 flex items-center justify-center" title="Marcar como pintado">
+                                        {paintBusy ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
                                       </button>
                                     )}
                                     <button onClick={() => removeGroup(cg)} disabled={removeBusy} className="p-1 rounded hover:bg-red-500/20 text-red-400 disabled:opacity-50" title="Remover da programação">
@@ -784,11 +768,19 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao }) => {
         </div>
       )}
 
-      <ProgramacaoPhotosModal
-        isOpen={photosModal.open}
-        onClose={() => setPhotosModal({ open: false, cliente: '', photos: [] })}
-        cliente={photosModal.cliente}
-        photos={photosModal.photos}
+      <ProgramacaoCardsModal
+        isOpen={cardsModal.open}
+        onClose={() => setCardsModal({ open: false, cliente: '', lotes: [] })}
+        cliente={cardsModal.cliente}
+        lotes={cardsModal.lotes}
+        now={now}
+        userRole={userRole}
+        onUpdateStatus={onUpdateStatus}
+        onMarcarEntregue={onMarcarEntregue}
+        onDelete={onDelete}
+        onEdit={onEdit}
+        onProgramar={onProgramar}
+        onOpenFinanceIntegration={onOpenFinanceIntegration}
       />
 
       <div className="glass-effect rounded-xl p-3 flex items-start gap-2 text-xs text-slate-400">
