@@ -3,8 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, Palette, Loader2, Layers, GitBranch } from 'lucide-react';
 import { supabase } from '@/lib/customSupabaseClient';
 import { todayISO } from '@/utils/dateUtils';
-
-const normCor = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+import { colorKey, findMatchingColor, uniqueColors } from '@/utils/colorNormalization';
 
 const ProgramarLoteModal = ({ isOpen, onClose, lote, onConfirm }) => {
   const [data, setData] = useState(todayISO());
@@ -13,6 +12,7 @@ const ProgramarLoteModal = ({ isOpen, onClose, lote, onConfirm }) => {
   const [saving, setSaving] = useState(false);
   const [existingColors, setExistingColors] = useState([]);
   const [subsets, setSubsets] = useState([]); // subsets da cor selecionada na cabine/data
+  const [matchedCor, setMatchedCor] = useState(null); // forma já cadastrada da cor digitada
   const [mode, setMode] = useState('join'); // 'join' | 'sequence'
   const [targetOrdemCor, setTargetOrdemCor] = useState(null);
 
@@ -37,7 +37,7 @@ const ProgramarLoteModal = ({ isOpen, onClose, lote, onConfirm }) => {
         .eq('data', data)
         .eq('cabine', Number(cabine));
       if (active && rows) {
-        const unique = [...new Set(rows.map(r => r.cor))].sort();
+        const unique = uniqueColors(rows.map(r => r.cor));
         setExistingColors(unique);
       }
     };
@@ -52,15 +52,17 @@ const ProgramarLoteModal = ({ isOpen, onClose, lote, onConfirm }) => {
     let active = true;
     const load = async () => {
       const corTrim = cor.trim();
-      if (!corTrim) { setSubsets([]); return; }
-      const corNorm = normCor(corTrim);
+      if (!corTrim) { setSubsets([]); setMatchedCor(null); return; }
       const { data: rows } = await supabase
         .from('programacao')
         .select('id, cor, ordem_cor, ordem_cliente, cliente')
         .eq('data', data)
         .eq('cabine', Number(cabine));
       if (!active || !rows) return;
-      const matching = rows.filter(r => normCor(r.cor) === corNorm);
+      // Comparação tolerante: caixa, acentos, espaços e 1–2 letras diferentes.
+      const match = findMatchingColor(corTrim, rows.map(r => r.cor));
+      setMatchedCor(match);
+      const matching = match ? rows.filter(r => colorKey(r.cor) === colorKey(match)) : [];
       const byOrdem = new Map();
       matching.forEach(r => {
         if (!byOrdem.has(r.ordem_cor)) byOrdem.set(r.ordem_cor, { ordem_cor: r.ordem_cor, clientes: new Set(), total: 0 });
@@ -211,8 +213,13 @@ const ProgramarLoteModal = ({ isOpen, onClose, lote, onConfirm }) => {
                   <div className="glass-effect rounded-xl p-3 space-y-2">
                     <p className="text-sm font-semibold text-slate-200 flex items-center gap-2">
                       <Layers className="w-4 h-4 text-amber-300" />
-                      Esta cor já tem {subsets.length} subconjunto{subsets.length > 1 ? 's' : ''} na Cabine {cabine}
+                      {matchedCor ? <>A cor <span className="text-amber-200">{matchedCor}</span> já tem</> : 'Esta cor já tem'} {subsets.length} subconjunto{subsets.length > 1 ? 's' : ''} na Cabine {cabine}
                     </p>
+                    {matchedCor && colorKey(matchedCor) !== colorKey(cor) && (
+                      <p className="text-xs text-amber-200">
+                        &quot;{cor.trim()}&quot; foi reconhecida como <strong>{matchedCor}</strong>. Se for outra cor, escolha &quot;Seguir sequência&quot;.
+                      </p>
+                    )}
                     <p className="text-xs text-slate-400">Escolha onde inserir o lote:</p>
                     <div className="space-y-2">
                       {subsets.map((s, idx) => (

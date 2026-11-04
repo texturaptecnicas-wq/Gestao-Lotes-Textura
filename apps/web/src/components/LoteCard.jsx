@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { DollarSign, Ruler, Truck, QrCode, Trash2, X, Edit, CalendarCheck, Calendar as CalendarIcon, CheckCircle, FileText, Lock, Star, MessageSquare, Eye, Loader2, MessageCircle } from 'lucide-react';
@@ -306,6 +307,10 @@ const LoteCard = ({ lote, now = Date.now(), userRole, onUpdateStatus, onMarcarEn
           </div>
         </div>
       </motion.div>
+      {/* Modais do card vão para o <body>: dentro de containers com transform
+          ou rolagem (ex.: modal de cards da programação) um "fixed" ficaria
+          preso e cortado, impedindo usar as funções do card. */}
+      {createPortal(<>
       {showQR && <QRCodeGenerator loteId={lote.id} cliente={lote.cliente} onClose={() => setShowQR(false)} />}
       {showWhatsAppModal && <WhatsAppMessageModal isOpen={showWhatsAppModal} onClose={() => setShowWhatsAppModal(false)} onSave={() => {}} />}
       {showScheduleModal && <ScheduleModal isOpen={showScheduleModal} onClose={() => setShowScheduleModal(false)} loteId={lote.id} currentCabine={lote.cabine} onUpdateStatus={onUpdateStatus} />}
@@ -323,8 +328,9 @@ const LoteCard = ({ lote, now = Date.now(), userRole, onUpdateStatus, onMarcarEn
       <AlertDetailsModal 
         isOpen={!!selectedAlert} 
         onClose={() => setSelectedAlert(null)} 
-        alert={selectedAlert} 
+        alert={selectedAlert}
       />
+      </>, document.body)}
     </>
   );
 };

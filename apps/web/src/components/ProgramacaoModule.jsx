@@ -9,12 +9,16 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { toast } from '@/components/ui/use-toast';
 import { todayISO, shiftDate, formatDisplay } from '@/utils/dateUtils';
 import ProgramacaoCardsModal from '@/components/ProgramacaoCardsModal';
+import { colorKey, findMatchingColor, isSameColor, uniqueColors } from '@/utils/colorNormalization';
 
 const CABINES = [1, 2, 3, 4];
 
-// Normaliza o nome da cor para agrupar variações de caixa/acentos/espaços
-// (ex: "preto tx" == "Preto TX") em um único grupo da programação.
-const normCor = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+// Encontra, entre os grupos de uma cabine, o grupo da mesma cor de forma
+// tolerante (caixa, acentos, espaços, pontuação e 1–2 letras diferentes).
+const findGroupByColor = (groups, cor) => {
+  const match = findMatchingColor(cor, groups.map((g) => g.cor));
+  return match ? groups.find((g) => colorKey(g.cor) === colorKey(match)) : undefined;
+};
 
 const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, userRole, onUpdateStatus, onMarcarEntregue, onDelete, onEdit, onProgramar, onOpenFinanceIntegration }) => {
   const [date, setDate] = useState(todayISO());
@@ -32,7 +36,9 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
   const [subsetTargetCabine, setSubsetTargetCabine] = useState(1);
   // Visualização dos cards completos dos lotes do cliente, com acesso a
   // todas as funcionalidades do card (ver foto, status, editar, entregar…).
-  const [cardsModal, setCardsModal] = useState({ open: false, cliente: '', lotes: [] });
+  // Guarda apenas os ids: os lotes exibidos são lidos ao vivo de `lotes`, para
+  // que o card reflita na hora qualquer alteração (pago, medida, pintado…).
+  const [cardsModal, setCardsModal] = useState({ open: false, cliente: '', loteIds: [] });
 
   // Reúne os lotes do grupo de cliente e abre o modal de cards. Se houver
   // mais de um lote do mesmo cliente, todos os cards aparecem juntos.
@@ -44,7 +50,7 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
       toast({ title: 'Sem lotes', description: 'Nenhum lote vinculado a este cliente.' });
       return;
     }
-    setCardsModal({ open: true, cliente: cg.cliente, lotes: lotesArr });
+    setCardsModal({ open: true, cliente: cg.cliente, loteIds: lotesArr.map((l) => l.id) });
   };
 
   const fetchEntries = useCallback(async () => {
@@ -96,6 +102,11 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
     return m;
   }, [lotes]);
 
+  const cardsModalLotes = useMemo(
+    () => cardsModal.loteIds.map((id) => lotesById.get(id)).filter(Boolean),
+    [cardsModal.loteIds, lotesById],
+  );
+
   // Apenas programações ativas (não pintadas) aparecem no quadro.
   const isLotePainted = useCallback((loteId) => paintedIds.has(loteId) || lotesById.get(loteId)?.pintado === true, [paintedIds, lotesById]);
 
@@ -129,9 +140,7 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
   }, [entries, isLotePainted]);
 
   const allColors = useMemo(() => {
-    const set = new Set();
-    entries.forEach((e) => set.add(e.cor));
-    return [...set].sort();
+    return uniqueColors(entries.map((e) => e.cor));
   }, [entries]);
 
   // Reordena subconjuntos de cor dentro da cabine. Atualiza por id para evitar
@@ -227,7 +236,9 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
       const alreadyLoteIds = new Set(rows.map(r => r.lote_id));
       const toInsert = cg.items.filter(it => !alreadyLoteIds.has(it.lote_id));
       if (toInsert.length === 0) { toast({ title: 'Já programado', description: 'Este cliente já está programado para amanhã.' }); return; }
-      const sameColor = rows.filter(r => r.cor === cor);
+      const matchedCor = findMatchingColor(cor, rows.map(r => r.cor));
+      const sameColor = matchedCor ? rows.filter(r => colorKey(r.cor) === colorKey(matchedCor)) : [];
+      const canonicalCor = matchedCor || cor;
       let ordem_cor, ordem_cliente;
       if (sameColor.length > 0) {
         ordem_cor = sameColor[0].ordem_cor;
@@ -239,11 +250,11 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
         ordem_cliente = 0;
       }
       const inserts = toInsert.map(it => ({
-        data: tomorrow, lote_id: it.lote_id, cabine: cabineNum, cor, ordem_cor, ordem_cliente, cliente: cg.cliente, ativo: true,
+        data: tomorrow, lote_id: it.lote_id, cabine: cabineNum, cor: canonicalCor, ordem_cor, ordem_cliente, cliente: cg.cliente, ativo: true,
       }));
       const { error: insertErr } = await supabase.from('programacao').insert(inserts);
       if (insertErr) { toast({ title: 'Erro ao repetir', description: insertErr.message, variant: 'destructive' }); return; }
-      toast({ title: 'Repetido para amanhã!', description: `${cg.cliente} → Cabine ${cabineNum} · ${cor} (${toInsert.length} lote${toInsert.length > 1 ? 's' : ''})` });
+      toast({ title: 'Repetido para amanhã!', description: `${cg.cliente} → Cabine ${cabineNum} · ${canonicalCor} (${toInsert.length} lote${toInsert.length > 1 ? 's' : ''})` });
     } finally {
       setBusyId(null);
     }
@@ -433,7 +444,7 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
     const newCor = moveCor.trim();
     if (!newCor) { toast({ title: 'Cor inválida', variant: 'destructive' }); return; }
     const targetGroups = board[newCabine] || [];
-    const existingColor = targetGroups.find((g) => normCor(g.cor) === normCor(newCor));
+    const existingColor = findGroupByColor(targetGroups, newCor);
     let ordem_cor;
     if (existingColor) {
       ordem_cor = existingColor.ordem_cor;
@@ -476,7 +487,7 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
     if (newCabine === group.cabine) { setMovingSubsetKey(null); return; }
     const newCor = group.cor;
     const targetGroups = board[newCabine] || [];
-    const existingColor = targetGroups.find((g) => normCor(g.cor) === normCor(newCor));
+    const existingColor = findGroupByColor(targetGroups, newCor);
     const canonicalCor = existingColor ? existingColor.cor : newCor;
     let ordem_cor;
     if (existingColor) {
@@ -600,7 +611,7 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
                       const moveSubsetBusy = busyId === `move-subset-${subsetKey}`;
                       // Conta quantos subconjuntos da mesma cor existem nesta cabine
                       // para exibir um rótulo quando houver mais de um.
-                      const sameColorCount = groups.filter((g) => normCor(g.cor) === normCor(group.cor)).length;
+                      const sameColorCount = groups.filter((g) => isSameColor(g.cor, group.cor)).length;
                       return (
                       <motion.div
                         key={group.ordem_cor}
@@ -770,9 +781,9 @@ const ProgramacaoModule = ({ lotes, onPaintLote, onRemoveFromProgramacao, now, u
 
       <ProgramacaoCardsModal
         isOpen={cardsModal.open}
-        onClose={() => setCardsModal({ open: false, cliente: '', lotes: [] })}
+        onClose={() => setCardsModal({ open: false, cliente: '', loteIds: [] })}
         cliente={cardsModal.cliente}
-        lotes={cardsModal.lotes}
+        lotes={cardsModalLotes}
         now={now}
         userRole={userRole}
         onUpdateStatus={onUpdateStatus}

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CreditCard } from 'lucide-react';
 import LoteCard from '@/components/LoteCard';
@@ -22,7 +23,14 @@ const ProgramacaoCardsModal = ({
 }) => {
   useEffect(() => {
     if (!isOpen) return;
-    const handleKeyDown = (e) => { if (e.key === 'Escape') onClose(); };
+    const handleKeyDown = (e) => {
+      // Esc fecha apenas este modal quando não há outro diálogo aberto por
+      // cima (editar, foto, QR, financeiro…).
+      if (e.key !== 'Escape') return;
+      const top = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+      if (top && !top.closest('[data-programacao-cards]')) return;
+      onClose();
+    };
     document.addEventListener('keydown', handleKeyDown);
     document.body.style.overflow = 'hidden';
     return () => {
@@ -31,7 +39,11 @@ const ProgramacaoCardsModal = ({
     };
   }, [isOpen, onClose]);
 
-  return (
+  // Renderizado direto no <body> e com z-index abaixo dos demais modais
+  // (z-50+) e dos toasts (z-100): assim editar, ver foto, QR, agendar,
+  // lançamento financeiro e avisos de "Pago" abrem por cima deste modal,
+  // com o mesmo comportamento do card na tela principal.
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -39,7 +51,8 @@ const ProgramacaoCardsModal = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 z-[250] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+          data-programacao-cards
+          className="fixed inset-0 z-[45] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -86,7 +99,8 @@ const ProgramacaoCardsModal = ({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 };
 

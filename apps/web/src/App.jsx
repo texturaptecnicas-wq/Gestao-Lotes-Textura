@@ -12,6 +12,7 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import LoteCard from '@/components/LoteCard';
 import { cleanupStorage } from '@/utils/cleanupStorage';
 import { todayISO, firstDayOfMonthISO } from '@/utils/dateUtils';
+import { colorKey, findMatchingColor } from '@/utils/colorNormalization';
 
 // Lazy loaded components
 const AddLoteModal = React.lazy(() => import('@/components/AddLoteModal'));
@@ -384,11 +385,6 @@ function LotesManager() {
     const cabineNum = Number(cabine);
     const corTrim = (cor || '').trim();
     if (!corTrim) { toast({ title: 'Cor obrigatória', variant: 'destructive' }); return false; }
-    // Normaliza a cor para comparar ignorando maiúsculas/minúsculas e espaços
-    // extras, de modo que um novo cliente entre no grupo da cor já existente
-    // (ex: "preto tx" == "Preto TX") em vez de criar um subconjunto separado.
-    const normCor = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    const corNorm = normCor(corTrim);
     const { data: existing, error: fetchErr } = await supabase
       .from('programacao')
       .select('cor, ordem_cor, ordem_cliente, cliente')
@@ -396,10 +392,14 @@ function LotesManager() {
       .eq('cabine', cabineNum);
     if (fetchErr) { toast({ title: 'Erro ao programar', description: fetchErr.message, variant: 'destructive' }); return false; }
     const rows = existing || [];
-    const sameColor = rows.filter(r => normCor(r.cor) === corNorm);
+    // Compara a cor de forma tolerante (maiúsculas/minúsculas, acentos,
+    // espaços, pontuação e 1–2 letras de diferença) para que o novo lote entre
+    // no grupo da cor já existente em vez de criar um subconjunto separado.
+    const matchedCor = findMatchingColor(corTrim, rows.map(r => r.cor));
+    const sameColor = matchedCor ? rows.filter(r => colorKey(r.cor) === colorKey(matchedCor)) : [];
     // Usa a forma canônica já armazenada da cor quando ela existe, garantindo
     // agrupamento consistente no quadro de programação.
-    const canonicalCor = sameColor.length > 0 ? sameColor[0].cor : corTrim;
+    const canonicalCor = matchedCor || corTrim;
     let ordem_cor; let ordem_cliente;
     if (mode === 'sequence') {
       // "Seguir sequência": ignora subconjuntos existentes dessa cor e cria um
@@ -440,7 +440,7 @@ function LotesManager() {
     }
     // Marca o lote como programado para que saia da área de Recebidos.
     await supabase.from('lotes').update({ programado: true, cabine: cabineNum, updated_at: new Date().toISOString() }).eq('id', lote.id);
-    toast({ title: 'Lote programado!', description: `${lote.cliente} → Cabine ${cabineNum} · ${corTrim}` });
+    toast({ title: 'Lote programado!', description: `${lote.cliente} → Cabine ${cabineNum} · ${canonicalCor}` });
     await fetchLotes();
     return true;
   }, [fetchLotes]);
