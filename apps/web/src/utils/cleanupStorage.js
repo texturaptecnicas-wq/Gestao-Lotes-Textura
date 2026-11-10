@@ -11,7 +11,7 @@
  */
 export const cleanupStorage = () => {
   try {
-    const allowedLocalKeys = ['userRole', 'loginType', 'whatsapp_message_default'];
+    const allowedLocalKeys = ['userRole', 'loginType', 'whatsapp_message_default', 'nomeAparelho'];
     const keysToRemove = [];
 
     // Identify obsolete items in localStorage
