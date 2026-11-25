@@ -13,6 +13,7 @@ import LoteCard from '@/components/LoteCard';
 import { cleanupStorage } from '@/utils/cleanupStorage';
 import { todayISO, firstDayOfMonthISO } from '@/utils/dateUtils';
 import { colorKey, findMatchingColor } from '@/utils/colorNormalization';
+import { identificacaoAparelho } from '@/utils/identificacaoAparelho';
 
 // Lazy loaded components
 const AddLoteModal = React.lazy(() => import('@/components/AddLoteModal'));
@@ -354,6 +355,8 @@ function LotesManager() {
     let finalUpdates = buildStatusUpdates(loteOriginal, updates);
     if (finalUpdates.programado === true && !finalUpdates.cabine) { setLoteToProgram(id); setIsCabineModalOpen(true); return false; }
     if (finalUpdates.programado === false && loteOriginal.programado) { finalUpdates = { ...finalUpdates, promessa: false, programado: false, cabine: null, ordem_pintura: null }; }
+    // Registra qual aparelho programou (a hora é gravada pelo banco).
+    if (finalUpdates.programado === true && !loteOriginal.programado) { finalUpdates = { ...finalUpdates, programado_por: identificacaoAparelho() }; }
     statusLocks.current.add(id);
     try {
       const { data, error } = await supabase.from('lotes').update(finalUpdates).eq('id', id).eq('updated_at', loteOriginal.updated_at).select('*').maybeSingle();
@@ -439,7 +442,16 @@ function LotesManager() {
       return false;
     }
     // Marca o lote como programado para que saia da área de Recebidos.
-    await supabase.from('lotes').update({ programado: true, cabine: cabineNum, updated_at: new Date().toISOString() }).eq('id', lote.id);
+    // Registra qual aparelho programou só na primeira vez (a hora é gravada
+    // pelo banco); reprogramar um lote já programado mantém o registro original.
+    const loteUpdates = { programado: true, cabine: cabineNum, updated_at: new Date().toISOString() };
+    if (!lote.programado) loteUpdates.programado_por = identificacaoAparelho();
+    const { error: loteErr } = await supabase.from('lotes').update(loteUpdates).eq('id', lote.id);
+    if (loteErr) {
+      toast({ title: 'Programação incompleta', description: `Entrou no quadro, mas o lote não foi marcado como programado: ${loteErr.message}`, variant: 'destructive' });
+      await fetchLotes();
+      return true;
+    }
     toast({ title: 'Lote programado!', description: `${lote.cliente} → Cabine ${cabineNum} · ${canonicalCor}` });
     await fetchLotes();
     return true;

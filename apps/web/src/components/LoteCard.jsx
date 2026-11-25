@@ -248,6 +248,15 @@ const LoteCard = ({ lote, now = Date.now(), userRole, onUpdateStatus, onMarcarEn
                   </div>
 
                   <p className="text-sm text-slate-300 text-shadow truncate w-full mb-2">{lote.cor} • {lote.quantidade ? `${lote.quantidade} peças` : 'N/A'}</p>
+                  {lote.programado && lote.programado_por && (
+                    <p
+                      className={`text-[11px] w-full truncate mb-1 ${lote.programado_por === 'sem identificação' ? 'text-amber-300 font-semibold' : 'text-slate-400'}`}
+                      title={`Programado por ${lote.programado_por}${lote.programado_em ? ` em ${new Date(lote.programado_em).toLocaleString('pt-BR', { timeZone: COMPANY_TIME_ZONE })}` : ''}`}
+                    >
+                      Progr. por {lote.programado_por}
+                      {lote.programado_em && ` · ${new Date(lote.programado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: COMPANY_TIME_ZONE })}`}
+                    </p>
+                  )}
               </div>
               <div className="flex flex-col gap-2 w-[48px] flex-shrink-0 z-0">
                 <SimpleStatusButton Icon={CalendarCheck} label="Progr." isActive={lote.programado} onClick={handleScheduleClick} colorClass="programado" />
